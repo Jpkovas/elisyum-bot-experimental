@@ -1,4 +1,4 @@
-import { WASocket } from "@whiskeysockets/baileys"
+import { WASocket, jidNormalizedUser } from "@whiskeysockets/baileys"
 import { Bot } from "../interfaces/bot.interface.js"
 import { Group } from "../interfaces/group.interface.js"
 import { Message } from "../interfaces/message.interface.js"
@@ -57,15 +57,67 @@ export async function sCommand(client: WASocket, botInfo: Bot, message: Message,
         let authorName = 'Membro do grupo';
         try {
             const quotedSender = message.quotedMessage!.sender;
+            const normalizedSender = jidNormalizedUser(quotedSender);
+            const possibleIds = Array.from(new Set([quotedSender, normalizedSender]));
             const userController = new UserController();
-            
-            // Busca o nome do banco de dados (salvo automaticamente quando usuário manda mensagem)
-            const user = await userController.getUser(quotedSender);
-            if (user && user.name && user.name.trim().length > 0) {
-                authorName = user.name;
+            const userCache = new Map<string, any>();
+            let storedUserName: string | undefined;
+
+            for (const userId of possibleIds) {
+                const user = await userController.getUser(userId);
+                userCache.set(userId, user);
+
+                if (user) {
+                    if (user.name && user.name.trim().length > 0) {
+                        storedUserName = user.name.trim();
+                        break;
+                    }
+                }
             }
-            // Se não encontrou, mantém "Membro do grupo" como padrão
-            
+
+            if (storedUserName) {
+                authorName = storedUserName;
+            } else {
+                // Tenta obter o nome pelo pushName da mensagem original
+                const pushName = message.quotedMessage?.wa_message?.pushName;
+
+                if (pushName && pushName.trim().length > 0) {
+                    authorName = pushName.trim();
+                } else {
+                    // Como fallback, consulta a agenda de contatos do cliente
+                    for (const contactId of possibleIds) {
+                        const contact = client.contacts?.[contactId];
+                        const contactName = contact?.notify || contact?.name || contact?.verifiedName;
+
+                        if (contactName && contactName.trim().length > 0) {
+                            authorName = contactName.trim();
+                            break;
+                        }
+                    }
+                }
+
+                // Se encontramos um nome através do pushName ou da agenda, salva no banco para futuros acessos
+                if (authorName !== 'Membro do grupo') {
+                    const storageId = normalizedSender.endsWith('@s.whatsapp.net')
+                        ? normalizedSender
+                        : quotedSender.endsWith('@s.whatsapp.net')
+                            ? quotedSender
+                            : undefined;
+
+                    if (storageId) {
+                        const existingUser = userCache.get(storageId) ?? await userController.getUser(storageId);
+                        userCache.set(storageId, existingUser);
+
+                        if (!existingUser) {
+                            await userController.registerUser(storageId, authorName);
+                        } else if (!existingUser.name || existingUser.name.trim().length === 0) {
+                            await userController.setName(storageId, authorName);
+                        }
+                    }
+                }
+            }
+            // Se não encontrou em nenhum lugar, mantém "Membro do grupo" como padrão
+
         } catch (err) {
             console.log(`[STICKER] Erro ao buscar nome:`, err);
         }
