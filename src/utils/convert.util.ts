@@ -1,8 +1,8 @@
-import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs-extra'
 import axios from 'axios'
 import {getTempPath, showConsoleLibraryError} from './general.util.js'
 import botTexts from '../helpers/bot.texts.helper.js'
+import { runFfmpeg } from './ffmpeg.util.js'
 
 export async function convertMp4ToMp3 (sourceType: 'buffer' | 'url',  video: Buffer | string){
     try {
@@ -27,22 +27,30 @@ export async function convertMp4ToMp3 (sourceType: 'buffer' | 'url',  video: Buf
             throw new Error("Unsupported media type.")
         }
         
-        await new Promise <void> ((resolve, reject)=>{
-            ffmpeg(inputVideoPath)
-            .outputOptions(['-vn', '-codec:a libmp3lame', '-q:a 3'])
-            .save(outputAudioPath)
-            .on('end', () => resolve())
-            .on("error", (err: Error) => reject(err))
-        }).catch((err) =>{
-            fs.unlinkSync(inputVideoPath)
-            throw err
-        })
+        try {
+            await runFfmpeg([
+                '-y',
+                '-i',
+                inputVideoPath,
+                '-vn',
+                '-codec:a',
+                'libmp3lame',
+                '-q:a',
+                '3',
+                outputAudioPath
+            ])
 
-        const audioBuffer = fs.readFileSync(outputAudioPath)
-        fs.unlinkSync(inputVideoPath)
-        fs.unlinkSync(outputAudioPath)
+            const audioBuffer = fs.readFileSync(outputAudioPath)
+            return audioBuffer
+        } finally {
+            if (fs.existsSync(inputVideoPath)) {
+                fs.unlinkSync(inputVideoPath)
+            }
 
-        return audioBuffer
+            if (fs.existsSync(outputAudioPath)) {
+                fs.unlinkSync(outputAudioPath)
+            }
+        }
     } catch(err){
         showConsoleLibraryError(err, 'convertMp4ToMp3')
         throw new Error(botTexts.library_error)
@@ -72,34 +80,47 @@ export async function convertVideoToWhatsApp(sourceType: 'buffer' | 'url',  vide
             throw new Error('Unsupported media type.')
         }
         
-        await new Promise <void> ((resolve, reject)=>{
-            ffmpeg(inputVideoPath)
-            .outputOptions([
-                '-c:v libx264',
-                '-profile:v baseline',
-                '-level 3.0',
-                '-pix_fmt yuv420p',
-                '-movflags faststart',
-                '-crf 23', 
-                '-preset fast',
-                '-c:a aac',
-                '-b:a 128k',
-                '-ar 44100',
-                '-f mp4'
+        try {
+            await runFfmpeg([
+                '-y',
+                '-i',
+                inputVideoPath,
+                '-c:v',
+                'libx264',
+                '-profile:v',
+                'baseline',
+                '-level',
+                '3.0',
+                '-pix_fmt',
+                'yuv420p',
+                '-movflags',
+                'faststart',
+                '-crf',
+                '23',
+                '-preset',
+                'fast',
+                '-c:a',
+                'aac',
+                '-b:a',
+                '128k',
+                '-ar',
+                '44100',
+                '-f',
+                'mp4',
+                outputVideoPath
             ])
-            .save(outputVideoPath)
-            .on('end', () => resolve())
-            .on("error", (err: Error) => reject(err))
-        }).catch((err) =>{
-            fs.unlinkSync(inputVideoPath)
-            throw err
-        })
 
-        const videoBuffer = fs.readFileSync(outputVideoPath)
-        fs.unlinkSync(inputVideoPath)
-        fs.unlinkSync(outputVideoPath)
+            const videoBuffer = fs.readFileSync(outputVideoPath)
+            return videoBuffer
+        } finally {
+            if (fs.existsSync(inputVideoPath)) {
+                fs.unlinkSync(inputVideoPath)
+            }
 
-        return videoBuffer
+            if (fs.existsSync(outputVideoPath)) {
+                fs.unlinkSync(outputVideoPath)
+            }
+        }
     } catch(err){
         showConsoleLibraryError(err, 'convertVideoToWhatsApp')
         throw new Error(botTexts.library_error)
@@ -135,30 +156,33 @@ export async function convertVideoToThumbnail(sourceType : "file"|"buffer"|"url"
             fs.writeFileSync(inputPath, bufferUrl)
         }
 
-        await new Promise <void> (async (resolve, reject)=>{
-            ffmpeg(inputPath)
-            .addOption("-y")
-            .inputOptions(["-ss 00:00:00"])
-            .outputOptions(["-vf scale=32:-1", "-vframes 1", "-f image2"])
-            .save(outputThumbnailPath)
-            .on('end', () => resolve())
-            .on('error', (err: Error) => reject(err))
-        }).catch((err)=>{
-            if (sourceType != 'file' && inputPath) {
+        try {
+            await runFfmpeg([
+                '-y',
+                '-ss',
+                '00:00:00',
+                '-i',
+                inputPath as string,
+                '-vf',
+                'scale=32:-1',
+                '-vframes',
+                '1',
+                '-f',
+                'image2',
+                outputThumbnailPath
+            ])
+
+            const thumbBase64 : Base64URLString = fs.readFileSync(outputThumbnailPath).toString('base64')
+            return thumbBase64
+        } finally {
+            if (sourceType != 'file' && inputPath && fs.existsSync(inputPath)) {
                 fs.unlinkSync(inputPath)
             }
 
-            throw err
-        })
-
-        if (sourceType != 'file' && inputPath){
-            fs.unlinkSync(inputPath)
+            if (fs.existsSync(outputThumbnailPath)) {
+                fs.unlinkSync(outputThumbnailPath)
+            }
         }
-
-        const thumbBase64 : Base64URLString = fs.readFileSync(outputThumbnailPath).toString('base64')
-        fs.unlinkSync(outputThumbnailPath)
-        
-        return thumbBase64
     } catch(err){
         showConsoleLibraryError(err, 'convertVideoToThumbnail')
         throw new Error(botTexts.library_error)
@@ -193,30 +217,31 @@ export async function extractAudioFromVideo(sourceType : "file"|"buffer"|"url", 
         throw new Error('Unsupported media type.')
     }
 
-    await new Promise <void> (async (resolve, reject)=>{
-        ffmpeg(inputVideoPath)
-        .noVideo()
-        .audioCodec('libmp3lame')
-        .audioBitrate('192k')
-        .format('mp3')
-        .save(outputAudioPath)
-    .on('end', () => resolve())
-    .on('error', (err: Error) => reject(err))
-    }).catch((err)=>{
-        if (sourceType != 'file' && inputVideoPath) {
+    try {
+        await runFfmpeg([
+            '-y',
+            '-i',
+            inputVideoPath,
+            '-vn',
+            '-codec:a',
+            'libmp3lame',
+            '-b:a',
+            '192k',
+            '-f',
+            'mp3',
+            outputAudioPath
+        ])
+
+        const audioBuffer = fs.readFileSync(outputAudioPath)
+        return audioBuffer
+    } finally {
+        if (sourceType != 'file' && inputVideoPath && fs.existsSync(inputVideoPath)){
             fs.unlinkSync(inputVideoPath)
         }
 
-        throw err
-    })
-
-    if (sourceType != 'file' && inputVideoPath){
-        fs.unlinkSync(inputVideoPath)
+        if (fs.existsSync(outputAudioPath)) {
+            fs.unlinkSync(outputAudioPath)
+        }
     }
-
-    const audioBuffer = fs.readFileSync(outputAudioPath)
-    fs.unlinkSync(outputAudioPath)
-    
-    return audioBuffer
 
 }

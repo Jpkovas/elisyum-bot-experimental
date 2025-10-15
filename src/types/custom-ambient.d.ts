@@ -1,9 +1,4 @@
 // Minimal ambient declarations to silence missing @types warnings during build
-declare module 'fluent-ffmpeg' {
-  const ffmpeg: any
-  export default ffmpeg
-}
-
 declare module 'qrcode-terminal' {
   const qrcode: any
   export default qrcode

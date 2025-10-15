@@ -1,4 +1,3 @@
-import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs-extra'
 import crypto from 'node:crypto'
 import webp from "node-webpmux"
@@ -7,6 +6,7 @@ import {fileTypeFromBuffer} from 'file-type'
 import { Jimp } from 'jimp'
 import { StickerOptions, StickerType } from "../interfaces/library.interface.js"
 import botTexts from '../helpers/bot.texts.helper.js'
+import { runFfmpeg } from './ffmpeg.util.js'
 
 export async function createSticker(mediaBuffer : Buffer, {pack = 'LBOT', author = 'LBOT Stickers', fps = 9, type = 'resize'}: StickerOptions){
     try {
@@ -36,18 +36,25 @@ export async function stickerToImage(stickerBuffer: Buffer){
         const outputPngPath = getTempPath('png')
         fs.writeFileSync(inputWebpPath, stickerBuffer)
 
-        await new Promise <void>((resolve, reject) => {
-            ffmpeg(inputWebpPath)
-            .save(outputPngPath)
-            .on('end', () => resolve())
-            .on('error', (err: Error) => reject(err))
-        })
+        try {
+            await runFfmpeg([
+                '-y',
+                '-i',
+                inputWebpPath,
+                outputPngPath
+            ])
 
-        const imageBuffer = fs.readFileSync(outputPngPath)
-        fs.unlinkSync(inputWebpPath)
-        fs.unlinkSync(outputPngPath)
+            const imageBuffer = fs.readFileSync(outputPngPath)
+            return imageBuffer
+        } finally {
+            if (fs.existsSync(inputWebpPath)) {
+                fs.unlinkSync(inputWebpPath)
+            }
 
-        return imageBuffer
+            if (fs.existsSync(outputPngPath)) {
+                fs.unlinkSync(outputPngPath)
+            }
+        }
     } catch(err){
         showConsoleLibraryError(err, 'stickerToImage')
         throw new Error(botTexts.library_error)
@@ -101,21 +108,25 @@ async function pngConvertion(mediaBuffer : Buffer){
         const outputMediaPath = getTempPath('png')
         fs.writeFileSync(inputMediaPath, mediaBuffer)
         
-        await new Promise <void>((resolve, reject) => {
-            ffmpeg(inputMediaPath)
-            .save(outputMediaPath)
-            .on('end', () => resolve())
-            .on('error', (err: Error) => reject(err))
-        }).catch((err: any)=>{
-            fs.unlinkSync(inputMediaPath)
-            throw err
-        })
+        try {
+            await runFfmpeg([
+                '-y',
+                '-i',
+                inputMediaPath,
+                outputMediaPath
+            ])
 
-        const pngBuffer = fs.readFileSync(outputMediaPath)
-        fs.unlinkSync(outputMediaPath)
-        fs.unlinkSync(inputMediaPath)
+            const pngBuffer = fs.readFileSync(outputMediaPath)
+            return pngBuffer
+        } finally {
+            if (fs.existsSync(outputMediaPath)) {
+                fs.unlinkSync(outputMediaPath)
+            }
 
-        return pngBuffer
+            if (fs.existsSync(inputMediaPath)) {
+                fs.unlinkSync(inputMediaPath)
+            }
+        }
     } catch(err) {
         throw err
     }
@@ -124,53 +135,56 @@ async function pngConvertion(mediaBuffer : Buffer){
 async function webpConvertion(mediaBuffer : Buffer, isAnimated: boolean, fps: number, type : StickerType){
     try {
         let inputMediaPath
-        let options
+        let options: string[]
         let outputMediaPath = getTempPath('webp')
 
         if(isAnimated){
             inputMediaPath = getTempPath('mp4')
             options = [
-                "-vcodec libwebp",
-                "-filter:v",
-                `fps=fps=${fps}`,
-                "-lossless 0",
-                "-compression_level 4",
-                "-q:v 10",
-                "-loop 1",
-                "-preset picture",
-                "-an",
-                "-vsync 0",
-                "-s 512:512"
+                '-vcodec', 'libwebp',
+                '-filter:v', `fps=fps=${fps}`,
+                '-lossless', '0',
+                '-compression_level', '4',
+                '-q:v', '10',
+                '-loop', '1',
+                '-preset', 'picture',
+                '-an',
+                '-vsync', '0',
+                '-s', '512:512'
             ]
         } else{
             inputMediaPath = getTempPath('png')
             mediaBuffer = await editImage(mediaBuffer, type)
             options = [
-                "-vcodec libwebp",
-                "-loop 0",
-                "-lossless 1",
-                "-q:v 100"
+                '-vcodec', 'libwebp',
+                '-loop', '0',
+                '-lossless', '1',
+                '-q:v', '100'
             ]
         }
 
         fs.writeFileSync(inputMediaPath, mediaBuffer)
 
-        await new Promise <void>((resolve, reject) => {
-            ffmpeg(inputMediaPath)
-            .outputOptions(options)
-            .save(outputMediaPath)
-            .on('end', () => resolve())
-            .on('error', (err: Error) => reject(err))
-        }).catch((err: any)=>{
-            fs.unlinkSync(inputMediaPath)
-            throw err
-        })
+        try {
+            await runFfmpeg([
+                '-y',
+                '-i',
+                inputMediaPath,
+                ...options,
+                outputMediaPath
+            ])
 
-        const webpBuffer = fs.readFileSync(outputMediaPath)
-        fs.unlinkSync(outputMediaPath)
-        fs.unlinkSync(inputMediaPath)
+            const webpBuffer = fs.readFileSync(outputMediaPath)
+            return webpBuffer
+        } finally {
+            if (fs.existsSync(outputMediaPath)) {
+                fs.unlinkSync(outputMediaPath)
+            }
 
-        return webpBuffer
+            if (fs.existsSync(inputMediaPath)) {
+                fs.unlinkSync(inputMediaPath)
+            }
+        }
     } catch(err){
         throw err
     }

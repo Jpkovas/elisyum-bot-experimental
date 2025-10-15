@@ -6,11 +6,13 @@ import { GroupController } from '../controllers/group.controller.js'
 import botTexts from '../helpers/bot.texts.helper.js'
 import { removeParticipant, sendTextWithMentions, removeWhatsappSuffix, addWhatsappSuffix } from '../utils/whatsapp.util.js'
 
+type ParticipantLike = GroupParticipant | string
+
 type ParticipantsUpdateEvent = {
     id: string
     author: string
     authorPn?: string
-    participants: GroupParticipant[]
+    participants: ParticipantLike[]
     action: ParticipantAction
 }
 
@@ -24,19 +26,20 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
         }
 
         for (const participant of event.participants ?? []) {
-            const participantId = participant.id
+            const participantId = typeof participant === 'string' ? participant : participant.id
 
             if (!participantId) {
                 continue
             }
 
             const isBotUpdate = participantId === botInfo.host_number
+            const isParticipantAdmin = typeof participant !== 'string' && participant.admin != null
 
             if (event.action === 'add') {
                 const isParticipant = await groupController.isParticipant(group.id, participantId)
 
                 if (isParticipant) {
-                    if (participant.admin) {
+                    if (isParticipantAdmin) {
                         await groupController.setAdmin(event.id, participantId, true)
                     }
                     continue
@@ -46,7 +49,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                 if (await isParticipantFake(client, botInfo, group, participantId)) continue
 
                 await sendWelcome(client, group, botInfo, participantId)
-                await groupController.addParticipant(group.id, participantId, participant.admin != null)
+                await groupController.addParticipant(group.id, participantId, isParticipantAdmin)
             } else if (event.action === 'remove') {
                 const isParticipant = await groupController.isParticipant(group.id, participantId)
 
@@ -71,7 +74,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
 
                 await groupController.setAdmin(event.id, participantId, false)
             } else if (event.action === 'modify') {
-                await groupController.setAdmin(event.id, participantId, participant.admin != null)
+                await groupController.setAdmin(event.id, participantId, isParticipantAdmin)
             }
         }
     } catch(err: any){

@@ -1,4 +1,3 @@
-import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs-extra'
 import {getTempPath, showConsoleLibraryError} from './general.util.js'
 import { convertMp4ToMp3 } from './convert.util.js'
@@ -11,6 +10,7 @@ import FormData from 'form-data'
 import { ApiKeys, AudioModificationType, MusicRecognition } from '../interfaces/library.interface.js'
 import crypto from 'node:crypto'
 import botTexts from '../helpers/bot.texts.helper.js'
+import { runFfmpeg } from './ffmpeg.util.js'
 
 export async function audioTranscription (audioBuffer : Buffer){
     try {
@@ -147,44 +147,43 @@ export async function audioModified (audioBuffer: Buffer, type: AudioModificatio
 
         switch(type){
             case "estourar":
-                options = ["-y", "-filter_complex", "acrusher=level_in=3:level_out=5:bits=10:mode=log:aa=1"] 
+                options = ["-filter_complex", "acrusher=level_in=3:level_out=5:bits=10:mode=log:aa=1"]
                 break
             case "reverso":
-                options = ["-y", "-filter_complex", "areverse"]
+                options = ["-filter_complex", "areverse"]
                 break
             case "grave":
-                options = ["-y", "-af", "asetrate=44100*0.5,aresample=44100,atempo=1.20"]
+                options = ["-af", "asetrate=44100*0.5,aresample=44100,atempo=1.20"]
                 break
             case "agudo":
-                options = ["-y", "-af", "asetrate=44100*1.1,aresample=44100,atempo=0.70"]
+                options = ["-af", "asetrate=44100*1.1,aresample=44100,atempo=0.70"]
                 break
             case "x2":
-                options = ["-y", "-filter:a", "atempo=2.0", "-vn"]
+                options = ["-filter:a", "atempo=2.0", "-vn"]
                 break
             case "volume":
-                options = ["-y", "-filter:a", "volume=4.0"]
+                options = ["-filter:a", "volume=4.0"]
                 break
             default:
                 fs.unlinkSync(inputAudioPath)
                 throw new Error(`This type of editing is not supported`)
         }
-        
-        await new Promise <void>((resolve, reject) => {
-            ffmpeg(inputAudioPath)
-            .outputOptions(options)
-            .save(outputAudioPath)
-            .on('end', () => resolve())
-            .on("error", (err: Error) => reject(err))
-        }).catch((err: any)=>{
-            fs.unlinkSync(inputAudioPath)
-            throw err
-        })
 
-        const bufferModifiedAudio = fs.readFileSync(outputAudioPath)
-        fs.unlinkSync(inputAudioPath)
-        fs.unlinkSync(outputAudioPath)
-        
-        return bufferModifiedAudio
+        const ffmpegArgs = ['-y', '-i', inputAudioPath, ...options, outputAudioPath]
+
+        try {
+            await runFfmpeg(ffmpegArgs)
+            const bufferModifiedAudio = fs.readFileSync(outputAudioPath)
+            return bufferModifiedAudio
+        } finally {
+            if (fs.existsSync(inputAudioPath)) {
+                fs.unlinkSync(inputAudioPath)
+            }
+
+            if (fs.existsSync(outputAudioPath)) {
+                fs.unlinkSync(outputAudioPath)
+            }
+        }
     } catch(err){
         showConsoleLibraryError(err, 'audioTranscription')
         throw new Error(botTexts.library_error)

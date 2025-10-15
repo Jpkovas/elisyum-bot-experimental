@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
-    "@types/fluent-ffmpeg": "^2.1.27",
     "@types/format-duration": "^3.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/jsdom": "^21.1.7",
@@ -68,7 +67,6 @@
     "emoji-mixer": "^1.2.2",
     "fb-downloader-scrapper": "^3.0.0",
     "file-type": "^20.1.0",
-    "fluent-ffmpeg": "^2.1.3",
     "form-data": "^4.0.0",
     "format-duration": "^3.0.2",
     "fs-extra": "^11.3.0",
