@@ -9,6 +9,7 @@ import NodeCache from "node-cache"
 import { clearBlockedContactsCache } from "../helpers/blocked-contacts.cache.js"
 import { UserController } from "../controllers/user.controller.js"
 import botTexts from "../helpers/bot.texts.helper.js"
+import { isWhatsappContextDebugEnabled } from "../config/logging.config.js"
 
 function invalidateBlockedContactsCache(){
     try {
@@ -439,14 +440,16 @@ export async function formatWAMessage(m: WAMessage, group: Group|null, hostId: s
         const quotedWAMessage = generateWAMessageFromContent(formattedMessage.chat_id, quotedMessage, { userJid: senderQuoted, messageId: quotedStanzaId })
         quotedWAMessage.key.fromMe = (hostId == senderQuoted)
 
-        // Debug: log completo do contextInfo
-        console.log(`[DEBUG-CONTEXT] contextInfo completo:`, JSON.stringify({
-            notifyName: (contextInfo as any)?.notifyName,
-            pushName: (contextInfo as any)?.pushName,
-            participant: contextInfo.participant,
-            remoteJid: contextInfo.remoteJid,
-            keys: Object.keys(contextInfo || {})
-        }, null, 2))
+        if (isWhatsappContextDebugEnabled()) {
+            // Debug: log completo do contextInfo
+            console.log(`[DEBUG-CONTEXT] contextInfo completo:`, JSON.stringify({
+                notifyName: (contextInfo as any)?.notifyName,
+                pushName: (contextInfo as any)?.pushName,
+                participant: contextInfo.participant,
+                remoteJid: contextInfo.remoteJid,
+                keys: Object.keys(contextInfo || {})
+            }, null, 2))
+        }
 
         formattedMessage.quotedMessage = {
             type: typeQuoted,
