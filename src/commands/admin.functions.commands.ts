@@ -205,14 +205,14 @@ export async function rmadminCommand(client: WASocket, botInfo: Bot, message: Me
 export async function comandospvCommand(client: WASocket, botInfo: Bot, message: Message, group: Group){
     const botController = new BotController()
     const replyText = botInfo.commands_pv ? adminCommands.comandospv.msgs.reply_off : adminCommands.comandospv.msgs.reply_on
-    botController.setCommandsPv(!botInfo.commands_pv)
+    await botController.setCommandsPv(!botInfo.commands_pv)
     await waUtil.replyText(client, message.chat_id, replyText, message.wa_message, {expiration: message.expiration})
 }
 
 export async function modoadminCommand(client: WASocket, botInfo: Bot, message: Message, group: Group){
     const botController = new BotController()
     const replyText = botInfo.admin_mode ? adminCommands.modoadmin.msgs.reply_off : adminCommands.modoadmin.msgs.reply_on
-    botController.setAdminMode(!botInfo.admin_mode)
+    await botController.setAdminMode(!botInfo.admin_mode)
     await waUtil.replyText(client, message.chat_id, replyText, message.wa_message, {expiration: message.expiration})
 }
 
@@ -249,7 +249,7 @@ export async function taxacomandosCommand(client: WASocket, botInfo: Bot, messag
 export async function autostickerpvCommand(client: WASocket, botInfo: Bot, message: Message, group: Group){
     const botController = new BotController()
     const replyText = botInfo.autosticker ? adminCommands.autostickerpv.msgs.reply_off : adminCommands.autostickerpv.msgs.reply_on
-    botController.setAutosticker(!botInfo.autosticker)
+    await botController.setAutosticker(!botInfo.autosticker)
     await waUtil.replyText(client, message.chat_id, replyText, message.wa_message, {expiration: message.expiration})
 }
 
@@ -290,7 +290,7 @@ export async function bcmdglobalCommand(client: WASocket, botInfo: Bot, message:
         }
     }
 
-    botController.setBlockedCommands(prefix, validCommands, 'add')
+    await botController.setBlockedCommands(prefix, validCommands, 'add')
     await waUtil.replyText(client, message.chat_id, blockResponse, message.wa_message, {expiration: message.expiration})
 }
 
@@ -331,7 +331,7 @@ export async function dcmdglobalCommand(client: WASocket, botInfo: Bot, message:
         }
     }
 
-    botController.setBlockedCommands(prefix, validCommands, 'remove')
+    await botController.setBlockedCommands(prefix, validCommands, 'remove')
     await waUtil.replyText(client, message.chat_id, unblockResponse, message.wa_message, {expiration: message.expiration})
 }
 
@@ -410,7 +410,7 @@ export async function nomebotCommand(client: WASocket, botInfo: Bot, message: Me
         throw new Error(messageErrorCommandUsage(botInfo.prefix, message))
     }
 
-    botController.setName(message.text_command)
+    await botController.setName(message.text_command)
     await waUtil.replyText(client, message.chat_id, adminCommands.nomebot.msgs.reply, message.wa_message, {expiration: message.expiration})
 }
 
@@ -424,7 +424,7 @@ export async function prefixoCommand(client: WASocket, botInfo: Bot, message: Me
         throw new Error(adminCommands.prefixo.msgs.error_not_supported)
     }
 
-    botController.setPrefix(message.text_command)
+    await botController.setPrefix(message.text_command)
     await waUtil.replyText(client, message.chat_id, adminCommands.prefixo.msgs.reply, message.wa_message, {expiration: message.expiration})
 }
 

@@ -28,7 +28,7 @@ export async function connectionPairingCode(client: WASocket){
 export async function connectionOpen(client: WASocket){
     try{
         const botController = new BotController()
-        botController.startBot(getHostNumber(client))
+        await botController.startBot(getHostNumber(client))
         console.log(colorText(botTexts.bot_data))
         await checkOwnerRegister()
     } catch(err: any) {

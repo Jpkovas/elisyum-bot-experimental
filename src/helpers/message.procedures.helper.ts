@@ -48,8 +48,8 @@ export async function incrementUserCommandsCount(message: Message){
     await userController.increaseUserCommandsCount(message.sender)
 }
 
-export function incrementBotCommandsCount(){
-    botController.incrementExecutedCommands()
+export async function incrementBotCommandsCount(){
+    await botController.incrementExecutedCommands()
 }
 
 export async function incrementGroupCommandsCount(group: Group){

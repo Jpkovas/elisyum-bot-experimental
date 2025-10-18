@@ -13,7 +13,7 @@ export async function botUpdater(){
     try{
         if (!botInfo.db_migrated || process.env.migrate) {
             await databaseMigration()
-            botController.setDbMigrated(true)
+            await botController.setDbMigrated(true)
             console.log(colorText(botTexts.migrating_database, '#e0e031'))
         }
 
@@ -26,7 +26,7 @@ export async function botUpdater(){
             console.log(colorText(botTexts.update_available, '#e0e031'))
             fs.removeSync('./dist')
             await updaterUtil.makeUpdate('./')
-            botController.setDbMigrated(false)
+            await botController.setDbMigrated(false)
             console.log(colorText(botTexts.bot_updated))
             hasBotUpdated = true
         }
