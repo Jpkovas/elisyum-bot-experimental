@@ -1,5 +1,6 @@
 # Recent Changes
 
+- Reorganizada a raiz agrupando scripts em `scripts/` (com subpasta `manual`) e movendo o yt-dlp para `bin/`, atualizando imports e documentação.
 - Convertido o BotService para cache assíncrono com mutex, atualizando consumidores e cobrindo cenários concorrentes/migração com novos testes.
 - Adicionada flag de debug `WHATSAPP_CONTEXT_DEBUG` para controlar logs detalhados do `contextInfo` no formatador de mensagens.
 - Normalizamos os IDs de usuários vindos de grupos e recriamos cadastros ausentes ao abrir o menu para evitar erros de "usuário não encontrado".

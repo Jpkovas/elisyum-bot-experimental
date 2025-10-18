@@ -142,7 +142,7 @@ export async function youtubeMedia (text: string){
         }
 
         // Obtém informações do vídeo usando yt-dlp (import dinâmico para compatibilidade CJS/ESM)
-        const ytDlpPath = new URL('../../yt-dlp', import.meta.url).pathname
+        const ytDlpPath = new URL('../../bin/yt-dlp', import.meta.url).pathname
         const YTDlpModule: any = await import('yt-dlp-wrap')
         
         // O constructor está em YTDlpModule.default.default (double default export)
@@ -210,7 +210,7 @@ export async function downloadYouTubeVideo(videoUrl: string): Promise<Buffer> {
     const { YOUTUBE_QUALITY_LIMIT } = await import('../config/youtube.config.js')
     
     try {
-        const ytDlpPath = new URL('../../yt-dlp', import.meta.url).pathname
+        const ytDlpPath = new URL('../../bin/yt-dlp', import.meta.url).pathname
         const YTDlpModule: any = await import('yt-dlp-wrap')
         
         // O constructor está em YTDlpModule.default.default (double default export)
