@@ -1,5 +1,6 @@
 # Recent Changes
 
+- Adicionada flag de debug `WHATSAPP_CONTEXT_DEBUG` para controlar logs detalhados do `contextInfo` no formatador de mensagens.
 - Normalizamos os IDs de usuários vindos de grupos e recriamos cadastros ausentes ao abrir o menu para evitar erros de "usuário não encontrado".
 - Registrados logs e filtragens para eventos de newsletters/canais no Baileys 7, isolando mensagens de broadcast do fluxo padrão.
 - Ajustado o balão de figurinhas de texto para priorizar o nome do contato citado em vez do texto padrão "Membro do grupo".
