@@ -58,7 +58,7 @@ export async function handlePrivateMessage(client: WASocket, botInfo: Bot, messa
         await procs.incrementUserCommandsCount(message)
 
         //Incrementa contagem de comandos do bot
-        procs.incrementBotCommandsCount()
+        await procs.incrementBotCommandsCount()
 
         callCommand = true
     } else {
@@ -148,7 +148,7 @@ export async function handleGroupMessage(client: WASocket, group: Group, botInfo
         await procs.incrementUserCommandsCount(message)
 
         //Incrementa contagem de comandos do bot
-        procs.incrementBotCommandsCount()
+        await procs.incrementBotCommandsCount()
 
         //Incrementa contagem de comandos do grupo
         await procs.incrementGroupCommandsCount(group)

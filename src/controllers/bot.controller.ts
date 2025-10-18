@@ -7,11 +7,11 @@ export class BotController {
         this.botService = new BotService()
     }
 
-    public startBot(hostNumber : string){
+    public async startBot(hostNumber : string){
         return this.botService.startBot(hostNumber)
     }
 
-    public migrateBot(){
+    public async migrateBot(){
         return this.botService.migrateBot()
     }
 
@@ -19,35 +19,35 @@ export class BotController {
         return this.botService.getBot()
     }
 
-    public setName(name: string){
+    public async setName(name: string){
         return this.botService.setNameBot(name)
     }
 
-    public setPrefix(prefix: string){
+    public async setPrefix(prefix: string){
         return this.botService.setPrefix(prefix)
     }
 
-    public setDbMigrated(status: boolean) {
+    public async setDbMigrated(status: boolean) {
         return this.botService.setDbMigrated(status)
-    }    
+    }
 
-    public incrementExecutedCommands(){
+    public async incrementExecutedCommands(){
         return this.botService.incrementExecutedCommands()
     }
 
-    public setAutosticker(status: boolean){
+    public async setAutosticker(status: boolean){
         return this.botService.setAutosticker(status)
     }
 
-    public setAdminMode(status: boolean){
+    public async setAdminMode(status: boolean){
         return this.botService.setAdminMode(status)
     }
 
-    public setCommandsPv(status: boolean){
+    public async setCommandsPv(status: boolean){
         return this.botService.setCommandsPv(status)
     }
 
-    public setCommandRate(status = true, maxCommandsMinute = 5, blockTime = 60){
+    public async setCommandRate(status = true, maxCommandsMinute = 5, blockTime = 60){
         return this.botService.setCommandRate(status, maxCommandsMinute, blockTime)
     }
 
