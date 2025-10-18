@@ -148,6 +148,11 @@ Diversos para administrar o bot e ter controle sobre ele.
 
 - O pacote `libsignal` exigido pelo Baileys é obtido diretamente do repositório oficial [`whiskeysockets/libsignal-node`](https://github.com/whiskeysockets/libsignal-node) com o commit `e81ecfc3`. O `yarn.lock` já referencia essa origem e dispensa hashes adicionais desde que a instalação seja feita via Yarn 4.
 
+### 🪵 Logs detalhados do WhatsApp
+
+- Para investigar metadados do WhatsApp (por exemplo `contextInfo` em mensagens respondidas), habilite o log de debug definindo a variável de ambiente `WHATSAPP_CONTEXT_DEBUG=true` antes de iniciar o bot: `WHATSAPP_CONTEXT_DEBUG=true yarn start`.
+- Também é possível utilizar valores como `1`, `yes` ou `on`; qualquer outro valor é interpretado como desligado. Sem a flag, o log `[DEBUG-CONTEXT]` permanece silenciado.
+
 ### 🔌 Dependências opcionais do Baileys 7
 
 - **`sharp`** agora é instalado como dependência opcional para destravar a geração de miniaturas automática em imagens, stickers e fotos de perfil. O próprio README do Baileys recomenda instalar `jimp` ou `sharp`, além de `ffmpeg` para miniaturas de vídeo.【F:node_modules/@whiskeysockets/baileys/README.md†L730-L732】 Na prática, o fallback do Baileys para `jimp` falha com a versão 1.x usada pelo projeto e resulta em `No image processing library available` sem `sharp`.【F:node_modules/@whiskeysockets/baileys/lib/Utils/messages-media.js†L17-L134】【fa6285†L9-L27】 Com `sharp` presente, a biblioteca consegue extrair uma miniatura de 64px do asset `src/media/cara.png` em ~197 ms neste ambiente.【c1a3e4†L1-L12】
