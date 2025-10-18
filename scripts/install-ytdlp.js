@@ -1,7 +1,7 @@
 // Script para baixar o binário yt-dlp usando curl/wget
 import { execSync } from 'child_process';
 import { platform } from 'os';
-import { chmodSync, existsSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -9,8 +9,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const isWindows = platform() === 'win32';
+const binaryDir = join(__dirname, '..', 'bin');
 const fileName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
-const ytDlpPath = join(__dirname, fileName);
+const ytDlpPath = join(binaryDir, fileName);
+
+try {
+    mkdirSync(binaryDir, { recursive: true });
+} catch (err) {
+    console.error('Não foi possível garantir o diretório bin:', err.message);
+    process.exit(1);
+}
 
 if (existsSync(ytDlpPath)) {
     console.log('✓ yt-dlp já está instalado em:', ytDlpPath);

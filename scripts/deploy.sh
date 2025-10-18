@@ -3,6 +3,11 @@
 
 set -e  # Para na primeira erro
 
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+BIN_DIR="$ROOT_DIR/bin"
+
+cd "$ROOT_DIR"
+
 echo "🚀 Elisyum Bot - Setup/Deploy Script"
 echo "======================================"
 echo ""
@@ -70,14 +75,17 @@ if command_exists yt-dlp; then
 fi
 
 # Sempre garantir que existe o binário local também
-if [ -f "./yt-dlp" ]; then
-    YTDLP_LOCAL_VERSION=$(./yt-dlp --version 2>/dev/null || echo "desconhecido")
+LOCAL_YTDLP="$BIN_DIR/yt-dlp"
+
+if [ -f "$LOCAL_YTDLP" ]; then
+    YTDLP_LOCAL_VERSION=$("$LOCAL_YTDLP" --version 2>/dev/null || echo "desconhecido")
     echo -e "${GREEN}✓${NC} yt-dlp local encontrado: $YTDLP_LOCAL_VERSION"
     YTDLP_INSTALLED=true
 else
     echo "📥 Baixando yt-dlp local..."
-    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o yt-dlp
-    chmod +x yt-dlp
+    mkdir -p "$BIN_DIR"
+    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o "$LOCAL_YTDLP"
+    chmod +x "$LOCAL_YTDLP"
     echo -e "${GREEN}✓${NC} yt-dlp local instalado!"
     YTDLP_INSTALLED=true
 fi

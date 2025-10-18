@@ -1,7 +1,14 @@
 // Inspect yt-dlp-wrap module structure
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const ytDlpPath = join(__dirname, '..', 'bin', 'yt-dlp');
+
 async function inspect() {
     console.log('=== Inspecting yt-dlp-wrap module ===');
-    
+
     const YTDlpModule = await import('yt-dlp-wrap');
     
     console.log('\n1. Module type:', typeof YTDlpModule);
@@ -23,8 +30,7 @@ async function inspect() {
     }
     
     console.log('\n8. Trying to instantiate:');
-    const ytDlpPath = '/home/paulo/dev/elisyum-bot/yt-dlp';
-    
+
     try {
         console.log('   Trying YTDlpModule.default...');
         const instance1 = new YTDlpModule.default(ytDlpPath);

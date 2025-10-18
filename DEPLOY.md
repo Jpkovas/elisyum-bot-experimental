@@ -43,7 +43,7 @@ yarn install
 
 ### 3. Baixar yt-dlp local (backup)
 ```bash
-node install-ytdlp.js
+node scripts/install-ytdlp.js
 ```
 
 ### 4. Compilar o projeto
@@ -156,7 +156,7 @@ sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o
 sudo chmod a+rx /usr/local/bin/yt-dlp
 
 # OU usar o local (já está no projeto)
-node install-ytdlp.js
+node scripts/install-ytdlp.js
 ```
 
 ## 📦 Estrutura após Build
@@ -171,7 +171,7 @@ elisyum-bot/
 ├── src/              # Código fonte TypeScript
 ├── storage/          # Dados do bot (sessão, grupos, etc)
 ├── node_modules/     # Dependências
-├── yt-dlp           # Binário do yt-dlp local
+├── bin/yt-dlp       # Binário do yt-dlp local
 └── package.json
 ```
 
