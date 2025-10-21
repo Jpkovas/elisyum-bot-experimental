@@ -1,5 +1,6 @@
 # Recent Changes
 
+- Ajustamos o evento de participantes para só salvar privilégios quando informados e reutilizar o cache de admin em blacklist/antifake.
 - Centralizamos a normalização de JIDs do WhatsApp e atualizamos serviços/eventos para armazenar e comparar participantes já sem sufixos de dispositivo, com testes cobrindo promoções do bot.
 - Documentamos o `!silenciar`, explicando como alterna o mute individual ao responder ou marcar membros mutados.
 - Bloqueamos mensagens de membros mutados quando o bot é admin e interrompemos os contadores do fluxo, com testes para garantir o comportamento em grupos.

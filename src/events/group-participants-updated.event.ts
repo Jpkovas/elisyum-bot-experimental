@@ -26,6 +26,37 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
             return
         }
 
+        const adminStatusCache = new Map<string, boolean>()
+
+        const cacheAdminStatus = (userId: string, status: boolean) => {
+            const normalizedUserId = normalizeWhatsappJid(userId)
+            if (!normalizedUserId) return
+
+            adminStatusCache.set(normalizedUserId, status)
+        }
+
+        const removeCachedAdminStatus = (userId: string) => {
+            const normalizedUserId = normalizeWhatsappJid(userId)
+            if (!normalizedUserId) return
+
+            adminStatusCache.delete(normalizedUserId)
+        }
+
+        const getAdminStatus = async (userId: string): Promise<boolean> => {
+            const normalizedUserId = normalizeWhatsappJid(userId)
+            if (!normalizedUserId) {
+                return false
+            }
+
+            if (adminStatusCache.has(normalizedUserId)) {
+                return adminStatusCache.get(normalizedUserId) as boolean
+            }
+
+            const isAdmin = await groupController.isParticipantAdmin(group.id, normalizedUserId)
+            adminStatusCache.set(normalizedUserId, isAdmin)
+            return isAdmin
+        }
+
         const ensureMutedMembers = (): string[] => {
             const mutedMembers = Array.isArray(group.muted_members) ? group.muted_members : []
             const normalizedMembers = mutedMembers
@@ -47,6 +78,10 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                 continue
             }
 
+            if (typeof participant.admin !== 'undefined') {
+                cacheAdminStatus(participantId, participant.admin != null)
+            }
+
             const isBotUpdate = normalizedBotNumber ? participantId === normalizedBotNumber : false
 
             if (event.action === 'add') {
@@ -55,15 +90,17 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                 if (isParticipant) {
                     if (participant.admin) {
                         await groupController.setAdmin(event.id, participantId, true)
+                        cacheAdminStatus(participantId, true)
                     }
                     continue
                 }
 
-                if (await isParticipantBlacklisted(client, normalizedBotNumber, botInfo, group, participantId)) continue
-                if (await isParticipantFake(client, normalizedBotNumber, botInfo, group, participantId)) continue
+                if (await isParticipantBlacklisted(client, normalizedBotNumber, botInfo, group, participantId, getAdminStatus)) continue
+                if (await isParticipantFake(client, normalizedBotNumber, botInfo, group, participantId, groupController, getAdminStatus)) continue
 
                 await sendWelcome(client, group, botInfo, participantId)
                 await groupController.addParticipant(group.id, participantId, participant.admin != null)
+                cacheAdminStatus(participantId, participant.admin != null)
             } else if (event.action === 'remove') {
                 const isParticipant = await groupController.isParticipant(group.id, participantId)
 
@@ -83,6 +120,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                 }
 
                 await groupController.removeParticipant(group.id, participantId)
+                removeCachedAdminStatus(participantId)
                 const mutedMembers = ensureMutedMembers()
 
                 if (mutedMembers.includes(participantId)) {
@@ -90,19 +128,25 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                     group.muted_members = mutedMembers.filter(memberId => memberId !== participantId)
                 }
             } else if (event.action === 'promote') {
-                const isAdmin = await groupController.isParticipantAdmin(group.id, participantId)
+                const isAdmin = await getAdminStatus(participantId)
 
                 if (isAdmin) continue
 
                 await groupController.setAdmin(event.id, participantId, true)
+                cacheAdminStatus(participantId, true)
             } else if (event.action === 'demote') {
-                const isAdmin = await groupController.isParticipantAdmin(group.id, participantId)
+                const isAdmin = await getAdminStatus(participantId)
 
                 if (!isAdmin) continue
 
                 await groupController.setAdmin(event.id, participantId, false)
+                cacheAdminStatus(participantId, false)
             } else if (event.action === 'modify') {
-                await groupController.setAdmin(event.id, participantId, participant.admin != null)
+                if (typeof participant.admin !== 'undefined') {
+                    const isAdmin = participant.admin != null
+                    await groupController.setAdmin(event.id, participantId, isAdmin)
+                    cacheAdminStatus(participantId, isAdmin)
+                }
             }
         }
     } catch(err: any){
@@ -111,15 +155,21 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
     }
 }
 
-async function isParticipantBlacklisted(client: WASocket, normalizedBotNumber: string, botInfo: Bot, group: Group, userId: string){
+async function isParticipantBlacklisted(
+    client: WASocket,
+    normalizedBotNumber: string,
+    botInfo: Bot,
+    group: Group,
+    userId: string,
+    getAdminStatus: (userId: string) => Promise<boolean>
+){
     const normalizedUserId = normalizeWhatsappJid(userId)
-    const groupController = new GroupController()
     const normalizedBlacklist = (group.blacklist ?? [])
         .map(blacklistId => normalizeWhatsappJid(blacklistId))
         .filter((blacklistId): blacklistId is string => !!blacklistId)
     group.blacklist = normalizedBlacklist
     const isUserBlacklisted = normalizedUserId ? normalizedBlacklist.includes(normalizedUserId) : false
-    const isBotAdmin = normalizedBotNumber ? await groupController.isParticipantAdmin(group.id, normalizedBotNumber) : false
+    const isBotAdmin = normalizedBotNumber ? await getAdminStatus(normalizedBotNumber) : false
 
     if (isBotAdmin && isUserBlacklisted) {
         const replyText = buildText(botTexts.blacklist_ban_message, removeWhatsappSuffix(normalizedUserId), botInfo.name)
@@ -131,13 +181,20 @@ async function isParticipantBlacklisted(client: WASocket, normalizedBotNumber: s
     return false
 }
 
-async function isParticipantFake(client: WASocket, normalizedBotNumber: string, botInfo: Bot, group: Group, userId: string){
+async function isParticipantFake(
+    client: WASocket,
+    normalizedBotNumber: string,
+    botInfo: Bot,
+    group: Group,
+    userId: string,
+    groupController: GroupController,
+    getAdminStatus: (userId: string) => Promise<boolean>
+){
     const normalizedUserId = normalizeWhatsappJid(userId)
 
     if (group.antifake.status){
-        const groupController = new GroupController()
-        const isBotAdmin = normalizedBotNumber ? await groupController.isParticipantAdmin(group.id, normalizedBotNumber) : false
-        const isGroupAdmin = normalizedUserId ? await groupController.isParticipantAdmin(group.id, normalizedUserId) : false
+        const isBotAdmin = normalizedBotNumber ? await getAdminStatus(normalizedBotNumber) : false
+        const isGroupAdmin = normalizedUserId ? await getAdminStatus(normalizedUserId) : false
         const isBotNumber = normalizedBotNumber ? normalizedUserId === normalizedBotNumber : false
 
         if (isBotAdmin){
