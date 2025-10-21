@@ -1,4 +1,5 @@
 import { WASocket, BaileysEvent, BaileysEventMap, GroupParticipant } from '@whiskeysockets/baileys'
+import { resolveContactJid } from '../utils/whatsapp.util.js'
 import NodeCache from 'node-cache'
 
 type QueuedEvent = { event: BaileysEvent; data: BaileysEventMap[BaileysEvent] }
@@ -17,8 +18,8 @@ type ParticipantLike = GroupParticipant | string
 
 function toParticipantIds(participants: ParticipantLike[] | undefined) {
     return (participants ?? [])
-        .map(participant => typeof participant === 'string' ? participant : participant.id)
-        .filter((id): id is string => typeof id === 'string')
+        .map(participant => resolveContactJid(participant))
+        .filter((id): id is string => !!id)
 }
 
 export async function queueEvent<T extends BaileysEvent>(

@@ -59,3 +59,37 @@ test("queueEvent retains updates for different participants", async () => {
     const events = cache.get("events") as { event: string }[]
     assert.equal(events.length, 2)
 })
+
+test("queueEvent deduplicates using phone numbers when available", async () => {
+    const cache = new NodeCache()
+    cache.set("events", [])
+
+    const lidParticipantEvent: BaileysEventMap['group-participants.update'] = {
+        id: "123@g.us",
+        author: "admin@s.whatsapp.net",
+        participants: [
+            {
+                id: "random-lid@lid",
+                phoneNumber: "user@s.whatsapp.net"
+            }
+        ],
+        action: "remove"
+    }
+
+    const jidParticipantEvent: BaileysEventMap['group-participants.update'] = {
+        id: "123@g.us",
+        author: "admin@s.whatsapp.net",
+        participants: [
+            {
+                id: "user@s.whatsapp.net"
+            }
+        ],
+        action: "remove"
+    }
+
+    await queueEvent(cache, "group-participants.update", lidParticipantEvent)
+    await queueEvent(cache, "group-participants.update", jidParticipantEvent)
+
+    const events = cache.get("events") as { event: string }[]
+    assert.equal(events.length, 1)
+})

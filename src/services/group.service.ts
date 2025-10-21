@@ -1,6 +1,6 @@
 import { Group } from "../interfaces/group.interface.js";
 import { GroupMetadata } from '@whiskeysockets/baileys'
-import { removePrefix } from "../utils/whatsapp.util.js";
+import { removePrefix, resolveContactJid, pickPreferredWhatsappJid } from "../utils/whatsapp.util.js";
 import DataStore from "@seald-io/nedb";
 import { ParticipantService } from "./participant.service.js";
 import { deepMerge } from "../utils/general.util.js";
@@ -64,7 +64,7 @@ export class GroupService {
             id: groupMetadata.id,
             name: groupMetadata.subject,
             description: groupMetadata.desc,
-            owner: groupMetadata.owner,
+            owner: pickPreferredWhatsappJid(groupMetadata.ownerPn, groupMetadata.owner),
             restricted: groupMetadata.announce,
             expiration: groupMetadata.ephemeralDuration
         }
@@ -73,7 +73,11 @@ export class GroupService {
 
         for (let participant of groupMetadata.participants) {
             const isAdmin = (participant.admin) ? true : false
-            await this.participantService.addParticipant(groupMetadata.id, participant.id, isAdmin)
+            await this.participantService.addParticipant(
+                groupMetadata.id,
+                resolveContactJid(participant),
+                isAdmin
+            )
         }
 
         return newGroup
@@ -106,7 +110,7 @@ export class GroupService {
                 await db.updateAsync({ id : groupMeta.id }, { $set: {
                     name: groupMeta.subject,
                     description: groupMeta.desc,
-                    owner: groupMeta.owner,
+                    owner: pickPreferredWhatsappJid(groupMeta.ownerPn, groupMeta.owner),
                     restricted: groupMeta.announce,
                     expiration: groupMeta.ephemeralDuration
                 }})

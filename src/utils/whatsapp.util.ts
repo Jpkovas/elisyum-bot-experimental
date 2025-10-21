@@ -1,4 +1,4 @@
-import { GroupMetadata, WAMessage, WAPresence, WASocket, S_WHATSAPP_NET, generateWAMessageFromContent, getContentType, jidNormalizedUser, proto, downloadMediaMessage } from "@whiskeysockets/baileys"
+import { GroupMetadata, GroupParticipant, WAMessage, WAPresence, WASocket, S_WHATSAPP_NET, generateWAMessageFromContent, getContentType, jidNormalizedUser, proto, downloadMediaMessage } from "@whiskeysockets/baileys"
 import { buildText, randomDelay } from "./general.util.js"
 import { MessageOptions, MessageTypes, Message } from "../interfaces/message.interface.js"
 import * as convertLibrary from './convert.util.js'
@@ -127,6 +127,30 @@ export function normalizeWhatsappJid(jid?: string | null): string {
     return sanitizedRawUser ? `${sanitizedRawUser}${S_WHATSAPP_NET}` : ''
 }
 
+export function pickPreferredWhatsappJid(...candidates: Array<string | null | undefined>): string {
+    for (const candidate of candidates) {
+        const normalized = normalizeWhatsappJid(candidate)
+
+        if (normalized) {
+            return normalized
+        }
+    }
+
+    return ''
+}
+
+export function resolveContactJid(contact?: GroupParticipant | string | null): string {
+    if (!contact) {
+        return ''
+    }
+
+    if (typeof contact === 'string') {
+        return normalizeWhatsappJid(contact)
+    }
+
+    return pickPreferredWhatsappJid(contact.phoneNumber, contact.id, contact.lid)
+}
+
 export function removePrefix(prefix: string, command: string){
     const commandWithoutPrefix = command.replace(prefix, '')
     return commandWithoutPrefix
@@ -134,7 +158,7 @@ export function removePrefix(prefix: string, command: string){
 
 export function getGroupParticipantsByMetadata(group : GroupMetadata){
     return group.participants
-        .map(participant => normalizeWhatsappJid(participant.id))
+        .map(participant => resolveContactJid(participant))
         .filter((participantId): participantId is string => !!participantId)
 }
 
@@ -142,7 +166,7 @@ export function getGroupAdminsByMetadata(group: GroupMetadata){
     const admins = group.participants.filter(user => (user.admin != null))
 
     return admins
-        .map(admin => normalizeWhatsappJid(admin.id))
+        .map(admin => resolveContactJid(admin))
         .filter((adminId): adminId is string => !!adminId)
 }
 
@@ -337,9 +361,11 @@ export async function demoteParticipant(client: WASocket, groupId: string, parti
 }
 
 export function storeMessageOnCache(message : proto.IWebMessageInfo, messageCache : NodeCache){
-    if (message.key.remoteJid && message.key.id && message.message){
-        messageCache.set(message.key.id, message.message)
-    }    
+    const messageKey = message.key
+
+    if (messageKey?.remoteJid && messageKey.id && message.message){
+        messageCache.set(messageKey.id, message.message)
+    }
 }
 
 export function getMessageFromCache(messageId: string, messageCache: NodeCache){

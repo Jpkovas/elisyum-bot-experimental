@@ -4,7 +4,7 @@ import { Bot } from '../interfaces/bot.interface.js'
 import { Group } from '../interfaces/group.interface.js'
 import { GroupController } from '../controllers/group.controller.js'
 import botTexts from '../helpers/bot.texts.helper.js'
-import { removeParticipant, sendTextWithMentions, removeWhatsappSuffix, addWhatsappSuffix, normalizeWhatsappJid } from '../utils/whatsapp.util.js'
+import { removeParticipant, sendTextWithMentions, removeWhatsappSuffix, addWhatsappSuffix, normalizeWhatsappJid, resolveContactJid } from '../utils/whatsapp.util.js'
 
 type ParticipantLike = GroupParticipant | string
 
@@ -36,12 +36,9 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
             return normalizedMembers
         }
 
-        const participants = (event.participants ?? []).map(participant =>
-            typeof participant === 'string' ? { id: participant } as GroupParticipant : participant
-        )
-
-        for (const participant of participants) {
-            const participantId = normalizeWhatsappJid(participant.id)
+        for (const participant of event.participants ?? []) {
+            const participantId = resolveContactJid(participant)
+            const participantData = typeof participant === 'string' ? undefined : participant
 
             if (!participantId) {
                 continue
@@ -53,7 +50,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                 const isParticipant = await groupController.isParticipant(group.id, participantId)
 
                 if (isParticipant) {
-                    if (participant.admin) {
+                    if (participantData?.admin) {
                         await groupController.setAdmin(event.id, participantId, true)
                     }
                     continue
@@ -63,7 +60,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
                 if (await isParticipantFake(client, normalizedBotNumber, botInfo, group, participantId)) continue
 
                 await sendWelcome(client, group, botInfo, participantId)
-                await groupController.addParticipant(group.id, participantId, participant.admin != null)
+                await groupController.addParticipant(group.id, participantId, participantData?.admin != null)
             } else if (event.action === 'remove') {
                 const isParticipant = await groupController.isParticipant(group.id, participantId)
 
@@ -102,7 +99,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
 
                 await groupController.setAdmin(event.id, participantId, false)
             } else if (event.action === 'modify') {
-                await groupController.setAdmin(event.id, participantId, participant.admin != null)
+                await groupController.setAdmin(event.id, participantId, participantData?.admin != null)
             }
         }
     } catch(err: any){

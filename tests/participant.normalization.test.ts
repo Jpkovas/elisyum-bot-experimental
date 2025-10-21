@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { ParticipantService } from "../src/services/participant.service.js"
 import { GroupController } from "../src/controllers/group.controller.js"
-import { normalizeWhatsappJid } from "../src/utils/whatsapp.util.js"
+import { normalizeWhatsappJid, resolveContactJid } from "../src/utils/whatsapp.util.js"
 
 const TEST_GROUP_ID = `test-normalization-${Date.now()}@g.us`
 
@@ -48,4 +48,13 @@ test("GroupController normalizes admin checks for promoted bot", async t => {
     const isAdmin = await groupController.isParticipantAdmin(TEST_GROUP_ID, rawBotJid)
 
     assert.equal(isAdmin, true)
+})
+
+test("resolveContactJid prioritizes phone numbers for LID participants", () => {
+    const resolved = resolveContactJid({
+        id: "a-lid@lid",
+        phoneNumber: "5511999999999@s.whatsapp.net"
+    })
+
+    assert.equal(resolved, "5511999999999@s.whatsapp.net")
 })

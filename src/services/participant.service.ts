@@ -1,7 +1,7 @@
 import { Participant, Group } from "../interfaces/group.interface.js";
 import { MessageTypes } from "../interfaces/message.interface.js";
 import { deepMerge, timestampToDate } from '../utils/general.util.js'
-import { normalizeWhatsappJid } from '../utils/whatsapp.util.js'
+import { normalizeWhatsappJid, resolveContactJid } from '../utils/whatsapp.util.js'
 import moment from 'moment-timezone'
 import DataStore from "@seald-io/nedb";
 import { GroupMetadata } from "@whiskeysockets/baileys";
@@ -36,7 +36,7 @@ export class ParticipantService {
     public async syncParticipants(groupMeta: GroupMetadata){
         //Adiciona participantes no banco de dados que entraram enquanto o bot estava off.
         for (const participant of groupMeta.participants) {
-            const normalizedParticipantId = this.normalizeUserId(participant.id)
+            const normalizedParticipantId = this.normalizeUserId(resolveContactJid(participant))
             const isAdmin = participant.admin ? true : false
             const isGroupParticipant = await this.isGroupParticipant(groupMeta.id, normalizedParticipantId)
 
@@ -49,7 +49,9 @@ export class ParticipantService {
 
         //Remove participantes do banco de dados que sairam do grupo enquanto o bot estava off.
         const normalizedParticipantIds = new Set(
-            groupMeta.participants.map(participant => this.normalizeUserId(participant.id)).filter(Boolean)
+            groupMeta.participants
+                .map(participant => this.normalizeUserId(resolveContactJid(participant)))
+                .filter(Boolean)
         )
         const currentParticipants = await this.getParticipantsFromGroup(groupMeta.id)
 
