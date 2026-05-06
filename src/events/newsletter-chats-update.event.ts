@@ -1,5 +1,6 @@
 import { isJidNewsletter, type ChatUpdate } from '@whiskeysockets/baileys'
 import { colorText, showConsoleError } from '../utils/general.util.js'
+import { hashForLog } from '../utils/privacy.util.js'
 
 export async function logNewsletterChatUpdates(updates: ChatUpdate[]) {
     try {
@@ -18,8 +19,8 @@ export async function logNewsletterChatUpdates(updates: ChatUpdate[]) {
 
             console.log(
                 colorText('[NEWSLETTER-CHAT]', '#c44569'),
-                colorText(id, '#20bf6b'),
-                name ? colorText(name, '#0fb9b1') : '',
+                colorText(hashForLog(id) || 'unknown', '#20bf6b'),
+                name ? colorText('name_present=true', '#0fb9b1') : '',
                 colorText(mute, '#f8a5c2'),
                 colorText(`unread:${unread}`, '#778beb')
             )

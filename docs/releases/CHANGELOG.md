@@ -21,6 +21,25 @@ Colocarei neste arquivos as mudanças significativas em cada versão começando 
 
 ## Unreleased
 
+### 🔧 Correções de update e setup - revisão PR 45
+- Atualizador agora mantém suporte a releases legadas com apenas um `.zip`, validando checksum quando o sidecar `.sha256` estiver disponível.
+- Instaladores locais do `yt-dlp` passaram a ter checksum padrão também para Windows.
+
+### 🔧 Correções de comandos e persistência - auditoria batch 5
+- Cache do `!ask` agora isola respostas por tipo de usuário.
+- Atualizações parciais de grupo preservam valores válidos como `false`, `0` e múltiplos campos no mesmo evento.
+- Antiflood, reset de avisos e comandos batch passaram a aguardar a persistência antes de responder.
+- Bloqueio de comandos aceita as subcategorias documentadas de utilidade, downloads, stickers e variados.
+- `!add` aceita múltiplos números separados por vírgula.
+- `!save` valida MIME, tamanho e quotas antes de salvar áudios globais.
+- Migração de áudios globais agora mantém backup e relatório de conflitos.
+
+### 🔧 Correções de confiabilidade - auditoria batch 4
+- Instalações de produção agora usam `bun install --frozen-lockfile`, com `bun.lock` rastreável.
+- Removidas dependências antigas de busca/upload/TTS que puxavam cadeias HTTP depreciadas.
+- Patch notes agora reconhecem a última seção do changelog e só marcam versão como notificada quando o envio aos grupos termina sem erro.
+- O scheduler passou a ser idempotente para evitar cron jobs duplicados após reconexões.
+
 ### 🎨 MUDANÇAS - Consolidação de Menus v3.1
 **Simplificação da estrutura de menus com visibilidade baseada em roles**
 
@@ -492,7 +511,4 @@ Ao iniciar o bot após a atualização:
 - Comando **!bantodos** foi removido.
 - Comando **ibanir** foi removido.
 - Comando **!infobot** foi removido, o comando **!info** vai servir para a função dele.
-
-
-
 

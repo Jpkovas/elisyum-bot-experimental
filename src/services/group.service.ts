@@ -149,10 +149,10 @@ export class GroupService {
 
     public async updatePartialGroup(group: Partial<GroupMetadata>) {
         if (group.id){
-            if (group.desc) await this.setDescription(group.id, group.desc)
-            else if (group.subject) await this.setName(group.id, group.subject)
-            else if (group.announce) await this.setRestricted(group.id, group.announce)
-            else if (group.ephemeralDuration) await this.setExpiration(group.id, group.ephemeralDuration)
+            if (Object.prototype.hasOwnProperty.call(group, 'desc')) await this.setDescription(group.id, group.desc)
+            if (Object.prototype.hasOwnProperty.call(group, 'subject')) await this.setName(group.id, group.subject || '')
+            if (Object.prototype.hasOwnProperty.call(group, 'announce')) await this.setRestricted(group.id, Boolean(group.announce))
+            if (Object.prototype.hasOwnProperty.call(group, 'ephemeralDuration')) await this.setExpiration(group.id, group.ephemeralDuration)
         }
     }
 

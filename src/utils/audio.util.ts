@@ -4,23 +4,91 @@ import {getTempPath, showConsoleLibraryError} from './general.util.js'
 import { convertMp4ToMp3 } from './convert.util.js'
 import format from 'format-duration'
 import {createClient} from '@deepgram/sdk'
-import tts from 'node-gtts'
 import {fileTypeFromBuffer, FileTypeResult} from 'file-type'
 import axios, { AxiosRequestConfig } from 'axios'
 import FormData from 'form-data'
-import { ApiKeys, AudioModificationType, MusicRecognition } from '../interfaces/library.interface.js'
+import { AudioModificationType, MusicRecognition } from '../interfaces/library.interface.js'
 import crypto from 'node:crypto'
 import botTexts from '../helpers/bot.texts.helper.js'
+import { getEnvList, getRequiredEnv } from './env.util.js'
+
+function getDeepgramKeys(){
+    const keys = getEnvList('DEEPGRAM_API_KEYS')
+    const singleKey = process.env.DEEPGRAM_API_KEY?.trim()
+
+    if (keys.length) {
+        return keys
+    }
+
+    return singleKey ? [singleKey] : []
+}
+
+function normalizeAcrCloudHost(rawHost: string){
+    const withoutProtocol = rawHost.trim().replace(/^https?:\/\//i, '')
+    const host = withoutProtocol.split('/')[0].toLowerCase()
+
+    if (!host || !/^[a-z0-9.-]+$/.test(host)) {
+        throw new Error('Invalid ACRCloud host')
+    }
+
+    const isAllowedHost = host === 'acrcloud.com' || host.endsWith('.acrcloud.com') || host.endsWith('.acrcloud.cn')
+
+    if (!isAllowedHost) {
+        throw new Error('Untrusted ACRCloud host')
+    }
+
+    return host
+}
+
+function getAcrCloudKeys(){
+    return [{
+        host: normalizeAcrCloudHost(getRequiredEnv('ACRCLOUD_HOST')),
+        access_key: getRequiredEnv('ACRCLOUD_ACCESS_KEY'),
+        secret_key: getRequiredEnv('ACRCLOUD_SECRET_KEY'),
+    }]
+}
+
+const GOOGLE_TTS_MAX_CHARS = 180
+
+function splitTextForSpeech(text: string) {
+    const words = text.trim().split(/\s+/).filter(Boolean)
+    const chunks: string[] = []
+    let current = ''
+
+    for (const word of words) {
+        if (!current) {
+            current = word
+            continue
+        }
+
+        if (`${current} ${word}`.length > GOOGLE_TTS_MAX_CHARS) {
+            chunks.push(current)
+            current = word
+            continue
+        }
+
+        current = `${current} ${word}`
+    }
+
+    if (current) {
+        chunks.push(current)
+    }
+
+    return chunks
+}
 
 export async function audioTranscription (audioBuffer : Buffer){
     try {
-        const apiKeysResponse = await axios.get('https://dub.sh/lbot-api-keys', {responseType: 'json'})
-        const apiKeys = apiKeysResponse.data as ApiKeys
+        const apiKeys = getDeepgramKeys()
         let error : any | undefined
 
-        for (let key of apiKeys.deepgram){
+        if (!apiKeys.length) {
+            throw new Error('DEEPGRAM_API_KEY is not configured')
+        }
+
+        for (let secretKey of apiKeys){
             try {
-                const deepgram = createClient(key.secret_key)
+                const deepgram = createClient(secretKey)
                 const deepgramConfig = {
                     model: 'nova-2',
                     language: 'pt-BR',
@@ -48,14 +116,13 @@ export async function audioTranscription (audioBuffer : Buffer){
 
 export async function musicRecognition (mediaBuffer : Buffer){
     try {
-        const apiKeysResponse = await axios.get('https://dub.sh/lbot-api-keys', {responseType: 'json'})
-        const apiKeys = apiKeysResponse.data as ApiKeys
+        const apiKeys = getAcrCloudKeys()
         let error : any | undefined
 
-        for (let key of apiKeys.acrcloud){
+        for (let key of apiKeys){
             try {
                 const ENDPOINT = '/v1/identify'
-                const URL_BASE = 'http://'+ key.host + ENDPOINT
+                const URL_BASE = 'https://'+ key.host + ENDPOINT
                 const { mime } = await fileTypeFromBuffer(mediaBuffer) as FileTypeResult
                 let audioBuffer : Buffer | undefined
         
@@ -122,16 +189,31 @@ export async function musicRecognition (mediaBuffer : Buffer){
 
 export async function textToVoice (lang: "pt" | 'en' | 'ja' | 'es' | 'it' | 'ru' | 'ko' | 'sv', text: string){
     try {
-        const audioPath = getTempPath("mp3")
+        const chunks = splitTextForSpeech(text)
 
-        await new Promise <void>((resolve) =>{
-            tts(lang).save(audioPath, text, () => resolve())
-        })
+        if (!chunks.length) {
+            throw new Error('Text is empty')
+        }
 
-        const audioBuffer = fs.readFileSync(audioPath)
-        fs.unlinkSync(audioPath)
+        const audioChunks = await Promise.all(chunks.map(async (chunk) => {
+            const ttsUrl = new URL('https://translate.google.com/translate_tts')
+            ttsUrl.searchParams.set('ie', 'UTF-8')
+            ttsUrl.searchParams.set('client', 'tw-ob')
+            ttsUrl.searchParams.set('tl', lang)
+            ttsUrl.searchParams.set('q', chunk)
 
-        return audioBuffer
+            const { data } = await axios.get<ArrayBuffer>(ttsUrl.toString(), {
+                responseType: 'arraybuffer',
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0',
+                },
+            })
+
+            return Buffer.from(data)
+        }))
+
+        return Buffer.concat(audioChunks)
     } catch(err){
         showConsoleLibraryError(err, 'textToVoice')
         throw new Error(botTexts.library_error)
@@ -190,4 +272,3 @@ export async function audioModified (audioBuffer: Buffer, type: AudioModificatio
         throw new Error(botTexts.library_error)
     }
 }
-

@@ -70,19 +70,9 @@ if command_exists bun; then
     BUN_VERSION=$(bun --version)
     print_success "Bun já está instalado (v$BUN_VERSION)"
 else
-    print_warning "Bun não encontrado. Instalando..."
-    curl -fsSL https://bun.sh/install | bash
-    
-    # Adicionar Bun ao PATH da sessão atual
-    export BUN_INSTALL="$HOME/.bun"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-    
-    if command_exists bun; then
-        print_success "Bun instalado com sucesso!"
-    else
-        print_error "Falha ao instalar Bun. Por favor, instale manualmente: https://bun.sh"
-        exit 1
-    fi
+    print_error "Bun não encontrado."
+    print_info "Instale o Bun por um canal confiável, revise o instalador quando aplicável, e execute este script novamente: https://bun.sh"
+    exit 1
 fi
 
 # 2. Verificar dependências do sistema
@@ -153,7 +143,7 @@ fi
 # 3. Instalar dependências do projeto
 echo -e "\n${BLUE}[3/6]${NC} Instalando dependências do Node.js..."
 if [ -f "package.json" ]; then
-    bun install
+    bun install --frozen-lockfile
     print_success "Dependências instaladas com sucesso!"
 else
     print_error "package.json não encontrado!"
@@ -193,9 +183,19 @@ BOT_PREFIX="!"
 # Administradores (separados por vírgula)
 ADMIN_NUMBERS="5519XXXXXXXXX"
 
+# Token de uso unico para cadastrar o primeiro dono com !admin <token>
+BOT_OWNER_BOOTSTRAP_TOKEN=""
+
 # Deepgram API (para transcrição de áudio)
 # Obtenha sua chave em: https://deepgram.com
 DEEPGRAM_API_KEY=""
+
+# APIs opcionais
+TMDB_API_KEY=""
+WEATHER_API_KEY=""
+ACRCLOUD_HOST=""
+ACRCLOUD_ACCESS_KEY=""
+ACRCLOUD_SECRET_KEY=""
 
 # Configurações opcionais
 DEBUG=false
@@ -241,9 +241,9 @@ echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}⚠  AÇÃO NECESSÁRIA${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "${RED}O Bun foi instalado, mas você precisa recarregar o shell!${NC}"
+echo -e "${RED}Se o Bun não aparecer em novos terminais, recarregue o shell.${NC}"
 echo ""
-echo -e "${GREEN}Execute AGORA:${NC}"
+echo -e "${GREEN}Execute se necessário:${NC}"
 echo ""
 echo -e "  ${BLUE}source ~/.bashrc${NC}"
 echo ""
@@ -271,7 +271,7 @@ echo "  Deploy: docs/guides/DEPLOY.md"
 echo ""
 
 # Tentar criar um script wrapper que funciona mesmo sem recarregar
-cat > elisyum-bot/run.sh << 'RUNSCRIPT'
+cat > ./run.sh << 'RUNSCRIPT'
 #!/bin/bash
 # Wrapper que adiciona Bun ao PATH automaticamente
 export BUN_INSTALL="$HOME/.bun"
@@ -288,11 +288,11 @@ cd "$(dirname "$0")"
 exec bun start -- "$@"
 RUNSCRIPT
 
-chmod +x elisyum-bot/run.sh
+chmod +x ./run.sh
 
 print_success "Tudo pronto! 🚀"
 echo ""
 echo -e "${GREEN}💡 DICA: Para iniciar o bot agora mesmo sem recarregar:${NC}"
 echo ""
-echo -e "  ${BLUE}cd elisyum-bot && ./run.sh${NC}"
+echo -e "  ${BLUE}cd $(pwd) && ./run.sh${NC}"
 echo ""

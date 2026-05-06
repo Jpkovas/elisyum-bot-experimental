@@ -4,7 +4,8 @@
 
 ### 1. Instalar Bun
 ```bash
-curl -fsSL https://bun.sh/install | bash
+# Baixe pelo canal oficial, revise o instalador quando aplicável, e siga as instruções do Bun:
+# https://bun.sh/docs/installation
 ```
 
 ### 2. Instalar FFmpeg (necessário para conversão de áudio/vídeo)
@@ -13,12 +14,15 @@ sudo apt update
 sudo apt install -y ffmpeg
 ```
 
-> ℹ️ O `sharp` é instalado automaticamente pelo Bun como dependência opcional do Baileys. Em distribuições sem binários pré-compilados, instale o toolchain (`sudo apt install -y build-essential python3 make g++`) antes de rodar o `bun install` para permitir a compilação local. Sem o `sharp`, a geração de miniaturas em stickers/imagens falhará.
+> ℹ️ O `sharp` é instalado automaticamente pelo Bun como dependência opcional do Baileys. Em distribuições sem binários pré-compilados, instale o toolchain (`sudo apt install -y build-essential python3 make g++`) antes de rodar o `bun install --frozen-lockfile` para permitir a compilação local. Sem o `sharp`, a geração de miniaturas em stickers/imagens falhará.
 
 ### 3. Instalar yt-dlp (para downloads do YouTube)
 ```bash
-sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-sudo chmod a+rx /usr/local/bin/yt-dlp
+YTDLP_VERSION=2025.12.08
+YTDLP_SHA256=aed043cabf6b352dfd5438afff595e31532538d5af7c8f4f95ced1e6f1b35c2a
+curl -fL "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp" -o /tmp/yt-dlp
+echo "${YTDLP_SHA256}  /tmp/yt-dlp" | shasum -a 256 -c -
+sudo install -m 755 /tmp/yt-dlp /usr/local/bin/yt-dlp
 ```
 
 ## 🔧 Deploy Inicial
@@ -32,7 +36,7 @@ cd elisyum-bot
 
 ### 2. Instalar dependências (incluindo dev)
 ```bash
-bun install
+bun install --frozen-lockfile
 ```
 
 ### 3. Baixar yt-dlp local (backup)
@@ -75,7 +79,7 @@ bun start
 ```bash
 cd ~/elisyum-bot
 git pull origin main
-bun install
+bun install --frozen-lockfile
 bun run preflight:storage > storage-preflight.before.json
 bun run build
 bun run preflight:storage > storage-preflight.after.json
@@ -123,7 +127,7 @@ nohup bun start > bot.log 2>&1 &
 
 **Solução:**
 ```bash
-bun install  # Reinstala TODAS as dependências
+bun install --frozen-lockfile  # Reinstala TODAS as dependências sem alterar o lockfile
 bun run build
 ```
 
@@ -132,7 +136,7 @@ bun run build
 
 **Solução:**
 ```bash
-bun install    # Garante que tem TypeScript
+bun install --frozen-lockfile    # Garante que tem TypeScript sem alterar o lockfile
 bun run build  # Compila o projeto
 ```
 
@@ -150,7 +154,7 @@ sudo apt install -y ffmpeg
 **Solução:**
 ```bash
 sudo apt install -y build-essential python3 make g++
-bun install
+bun install --frozen-lockfile
 ```
 Se o ambiente bloquear o download de binários do `sharp`, instale as bibliotecas do sistema para permitir compilação local.
 
@@ -160,8 +164,11 @@ Se o ambiente bloquear o download de binários do `sharp`, instale as biblioteca
 **Solução:**
 ```bash
 # Instalar globalmente
-sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-sudo chmod a+rx /usr/local/bin/yt-dlp
+YTDLP_VERSION=2025.12.08
+YTDLP_SHA256=aed043cabf6b352dfd5438afff595e31532538d5af7c8f4f95ced1e6f1b35c2a
+curl -fL "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp" -o /tmp/yt-dlp
+echo "${YTDLP_SHA256}  /tmp/yt-dlp" | shasum -a 256 -c -
+sudo install -m 755 /tmp/yt-dlp /usr/local/bin/yt-dlp
 
 # OU usar o local (já está no projeto)
 bun run scripts/setup/install-ytdlp.js
@@ -218,7 +225,7 @@ pm2 save
 
 ## 📝 Notas Importantes
 
-1. **Sempre use `bun install` no servidor** para ter as ferramentas de build
+1. **Sempre use `bun install --frozen-lockfile` no servidor** para ter as ferramentas de build com o mesmo lockfile testado
 2. **Compile antes de iniciar** com `bun run build`
 3. **FFmpeg é obrigatório** para comandos de áudio/vídeo
 4. **yt-dlp pode ser global ou local** (o bot tenta ambos)

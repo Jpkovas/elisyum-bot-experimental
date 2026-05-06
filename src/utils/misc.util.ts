@@ -1,7 +1,6 @@
 import axios from 'axios'
 import {prettyNum} from 'pretty-num'
 import { translate } from '@vitalets/google-translate-api'
-import google from '@victorsouzaleal/googlethis'
 import { OrganicResult, search } from 'google-sr'
 import Genius from 'genius-lyrics'
 import qs from 'querystring'
@@ -13,6 +12,7 @@ import { AnimeRelease, CurrencyConvert, MangaRelease, MusicLyrics, News, SearchG
 import moment from 'moment-timezone'
 import Fuse from 'fuse.js'
 import botTexts from '../helpers/bot.texts.helper.js'
+import { getRequiredEnv } from './env.util.js'
 
 export async function animeReleases(){
     try {
@@ -99,8 +99,10 @@ export async function brasileiraoTable(serie : "A" | "B"){
 export async function moviedbTrendings(type : 'movie' | 'tv' = "movie"){
     try {
         let num = 0
-        const BASE_URL = `https://api.themoviedb.org/3/trending/${type}/day?api_key=6618ac868ff51ffa77d586ee89223f49&language=pt-BR`
-        const {data : movieDbResponse} = await axios.get(BASE_URL)
+        const movieDbUrl = new URL(`https://api.themoviedb.org/3/trending/${type}/day`)
+        movieDbUrl.searchParams.set('api_key', getRequiredEnv('TMDB_API_KEY'))
+        movieDbUrl.searchParams.set('language', 'pt-BR')
+        const {data : movieDbResponse} = await axios.get(movieDbUrl.toString())
         const trendings : string = movieDbResponse.results.map((item: { title: string; name: string; overview: string })=>{
             num++
             return `${num}°: *${item.title || item.name}.*\n\`Sinopse:\` ${item.overview} \n`
@@ -141,15 +143,39 @@ export async function calcExpression(expr: string){
 
 export async function newsGoogle(lang = 'pt'){
     try {
-        const newsList = await google.getTopNews(lang)
-        let newsResponse : News[] = newsList.headline_stories.map(news => {
-            return {
-                title : news.title,
-                published : news.published,
-                author: news.by,
-                url : news.url
-            }
+        const newsUrl = new URL('https://news.google.com/rss')
+        const locale = lang === 'pt'
+            ? { hl: 'pt-BR', gl: 'BR', ceid: 'BR:pt-419' }
+            : { hl: lang, gl: 'US', ceid: `US:${lang}` }
+        newsUrl.searchParams.set('hl', locale.hl)
+        newsUrl.searchParams.set('gl', locale.gl)
+        newsUrl.searchParams.set('ceid', locale.ceid)
+
+        const {data : newsRss} = await axios.get<string>(newsUrl.toString(), {
+            headers: {"User-Agent": new UserAgent().toString()},
+            timeout: 30000,
         })
+        const { window : { document } } = new JSDOM(newsRss, { contentType: 'text/xml' })
+        const newsItems = Array.from(document.querySelectorAll('item')) as Array<{
+            querySelector: (selector: string) => { textContent: string | null } | null
+        }>
+        let newsResponse : News[] = newsItems.map(item => {
+            const title = item.querySelector('title')?.textContent?.trim()
+            const published = item.querySelector('pubDate')?.textContent?.trim()
+            const source = item.querySelector('source')?.textContent?.trim()
+            const url = item.querySelector('link')?.textContent?.trim()
+
+            if (!title || !published || !url) {
+                return null
+            }
+
+            return {
+                title,
+                published,
+                author: source || 'Google News',
+                url
+            }
+        }).filter((news): news is News => news !== null)
 
         return newsResponse
     } catch(err) {
@@ -205,8 +231,13 @@ export async function webSearchGoogle(texto: string){
 
 export async function wheatherInfo(location: string){
     try {
-        const WEATHER_API_URL = `http://api.weatherapi.com/v1/forecast.json?key=516f58a20b6c4ad3986123104242805&q=${encodeURIComponent(location)}&days=3&aqi=no&alerts=no`
-        const {data : wheatherResult} = await axios.get(WEATHER_API_URL)
+        const weatherUrl = new URL('https://api.weatherapi.com/v1/forecast.json')
+        weatherUrl.searchParams.set('key', getRequiredEnv('WEATHER_API_KEY'))
+        weatherUrl.searchParams.set('q', location)
+        weatherUrl.searchParams.set('days', '3')
+        weatherUrl.searchParams.set('aqi', 'no')
+        weatherUrl.searchParams.set('alerts', 'no')
+        const {data : wheatherResult} = await axios.get(weatherUrl.toString())
         const {data: wheatherConditions} = await axios.get("https://www.weatherapi.com/docs/conditions.json", {responseType: 'json'})
         const currentCondition = wheatherConditions.find((condition: { code: number }) => 
             condition.code === wheatherResult.current.condition.code

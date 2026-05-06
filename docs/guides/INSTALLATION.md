@@ -10,10 +10,12 @@ Este guia explica como instalar e configurar o bot do zero.
 
 ## 🛠️ Instalação Rápida
 
-### Opção 1: Um Comando Só (Mais Fácil!)
+### Opção 1: Script local revisável
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main/scripts/setup/install.sh | bash
+git clone https://github.com/paulocesarcustodio/elisyum-bot.git
+cd elisyum-bot
+./scripts/setup/install.sh
 ```
 
 **⚠️ IMPORTANTE:** Após a instalação, recarregue o shell:
@@ -21,9 +23,9 @@ curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main
 source ~/.bashrc
 ```
 
-Este comando único:
-- 📥 Clona o repositório automaticamente
-- 🔧 Instala todas as dependências (Bun, FFmpeg, etc)
+Este fluxo:
+- 📥 Usa o script versionado dentro do repositório clonado
+- 🔧 Valida Bun já instalado e instala dependências do projeto
 - 🏗️ Compila o projeto
 - ✅ Adiciona Bun ao PATH permanentemente
 
@@ -39,7 +41,7 @@ cd elisyum-bot
 ```
 
 O script automaticamente:
-- ✅ Instala o Bun (se necessário)
+- ✅ Valida o Bun já instalado
 - ✅ Instala FFmpeg para conversão de mídia
 - ✅ Instala dependências do Canvas (Linux)
 - ✅ Instala todas as dependências npm
@@ -76,9 +78,19 @@ BOT_PREFIX="!"
 # Números dos administradores (com código do país, sem + ou espaços)
 ADMIN_NUMBERS="5519983084398,5519912345678"
 
+# Token de uso unico para cadastrar o primeiro dono com !admin <token>
+BOT_OWNER_BOOTSTRAP_TOKEN=""
+
 # API Deepgram para transcrição de áudio (opcional)
 # Obtenha em: https://deepgram.com
 DEEPGRAM_API_KEY="sua_chave_aqui"
+
+# APIs opcionais
+TMDB_API_KEY=""
+WEATHER_API_KEY=""
+ACRCLOUD_HOST=""
+ACRCLOUD_ACCESS_KEY=""
+ACRCLOUD_SECRET_KEY=""
 
 # Debug (opcional)
 DEBUG=false
@@ -209,7 +221,8 @@ O relatório lista `session.db`, `bot.db`, quantidade de áudios em `storage/aud
 ### 1. Instalar Bun
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+# Use o método oficial da sua plataforma e revise o instalador quando aplicável:
+# https://bun.sh/docs/installation
 ```
 
 ### 2. Instalar FFmpeg
@@ -234,7 +247,7 @@ sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev lib
 ### 4. Instalar dependências do projeto
 
 ```bash
-bun install
+bun install --frozen-lockfile
 ```
 
 ### 5. Criar diretórios
@@ -262,7 +275,7 @@ Para atualizar o bot para a versão mais recente:
 
 ```bash
 git pull origin main
-bun install
+bun install --frozen-lockfile
 bun run build
 bun start
 ```
@@ -332,7 +345,7 @@ Reinstale as dependências:
 
 ```bash
 rm -rf node_modules bun.lockb
-bun install
+bun install --frozen-lockfile
 ```
 
 ### Banco de dados corrompido

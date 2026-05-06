@@ -2,6 +2,7 @@ import { Contact } from '@whiskeysockets/baileys'
 import { showConsoleError } from '../utils/general.util.js'
 import { UserController } from '../controllers/user.controller.js'
 import { updateContactInStore } from '../helpers/contacts.store.helper.js'
+import { hashForLog } from '../utils/privacy.util.js'
 
 export async function contactsUpdate(contacts: Partial<Contact>[]) {
     try {
@@ -19,7 +20,7 @@ export async function contactsUpdate(contacts: Partial<Contact>[]) {
             if (nameToSave && nameToSave.trim().length > 0) {
                 // Salva/atualiza o nome do contato no banco de dados
                 await userController.setName(contact.id, nameToSave.trim(), contact.phoneNumber, contact.lid)
-                console.log(`[CONTACTS] Nome atualizado: ${nameToSave} (${contact.id})`)
+                console.log(`[CONTACTS] Nome atualizado: ${hashForLog(contact.id)} name_present=true`)
             }
         }
     } catch (err: any) {

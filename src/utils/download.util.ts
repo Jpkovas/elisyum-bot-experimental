@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {formatSeconds, showConsoleLibraryError} from './general.util.js'
+import { Readable } from 'node:stream'
+import {detectPlatform, formatSeconds, showConsoleLibraryError} from './general.util.js'
 import {instagramGetUrl} from 'instagram-url-direct'
 import { getFbVideoInfo } from 'fb-downloader-scrapper'
 import Tiktok from '@tobyg74/tiktok-api-dl'
@@ -64,10 +65,81 @@ console.log(`[download.util] 🔧 Configuração inicial: yt-dlp=${ytDlpPath}, b
 const ytdlp = new YtDlp({ binaryPath: ytDlpPath })
 
 const X_DOWNLOADABLE_MEDIA_TYPES = new Set(['video', 'gif'])
+const DEFAULT_REMOTE_DOWNLOAD_MAX_BYTES = 64 * 1024 * 1024
+
+type DownloadFromUrlOptions = {
+    maxBytes?: number
+    timeoutMs?: number
+}
+
+class DownloadSizeLimitError extends Error {}
+
+function getPositiveIntegerEnv(name: string, fallback: number) {
+    const rawValue = process.env[name]
+    const parsedValue = rawValue ? Number(rawValue) : fallback
+
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : fallback
+}
+
+function getDownloadMaxBytes(options?: DownloadFromUrlOptions) {
+    return options?.maxBytes ?? getPositiveIntegerEnv('MAX_REMOTE_DOWNLOAD_BYTES', DEFAULT_REMOTE_DOWNLOAD_MAX_BYTES)
+}
+
+function getYouTubeMaxBytes() {
+    return getPositiveIntegerEnv('MAX_YOUTUBE_DOWNLOAD_BYTES', DEFAULT_REMOTE_DOWNLOAD_MAX_BYTES)
+}
+
+function getHeaderNumber(headers: Record<string, unknown> | undefined, name: string) {
+    const value = headers?.[name] ?? headers?.[name.toLowerCase()]
+    const normalizedValue = Array.isArray(value) ? value[0] : value
+    const parsedValue = Number(normalizedValue)
+
+    return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : undefined
+}
+
+async function bufferFromStreamWithLimit(stream: Readable, maxBytes: number, onProgress?: (percent: number) => void, contentLength?: number) {
+    const chunks: Buffer[] = []
+    let totalBytes = 0
+
+    for await (const chunk of stream) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        totalBytes += buffer.length
+
+        if (totalBytes > maxBytes) {
+            stream.destroy()
+            throw new DownloadSizeLimitError(`Download excede o limite de ${maxBytes} bytes`)
+        }
+
+        chunks.push(buffer)
+
+        if (onProgress && contentLength) {
+            onProgress(Math.min(99, Math.floor((totalBytes / contentLength) * 100)))
+        }
+    }
+
+    if (onProgress) {
+        onProgress(100)
+    }
+
+    return Buffer.concat(chunks)
+}
+
+function buildXApiUrl(rawUrl: string) {
+    if (detectPlatform(rawUrl) !== 'twitter') {
+        throw new Error('Unsupported X/Twitter host')
+    }
+
+    const parsedUrl = new URL(rawUrl)
+    parsedUrl.protocol = 'https:'
+    parsedUrl.username = ''
+    parsedUrl.password = ''
+    parsedUrl.host = 'api.vxtwitter.com'
+    return parsedUrl.toString()
+}
 
 export async function xMedia (url: string){
     try {
-        const newURL = url.replace(/twitter\.com|x\.com/g, 'api.vxtwitter.com')
+        const newURL = buildXApiUrl(url)
         const {data : xResponse} = await axios.get(newURL)
 
         if (!Array.isArray(xResponse.media_extended)){
@@ -296,39 +368,35 @@ export async function youtubeMedia (text: string){
     }
 }
 
-export async function downloadFromUrl(url: string, onProgress?: (percent: number) => void): Promise<Buffer> {
+export async function downloadFromUrl(url: string, onProgress?: (percent: number) => void, options?: DownloadFromUrlOptions): Promise<Buffer> {
     try {
-        let simulatedProgress = 0
-        let progressInterval: NodeJS.Timeout | null = null
-        
-        // Inicia progresso simulado (tempo médio: 10-15s para downloads simples)
-        if (onProgress) {
-            const estimatedSeconds = 12
-            const incrementInterval = (estimatedSeconds * 1000) / 95
-            
-            progressInterval = setInterval(() => {
-                if (simulatedProgress < 95) {
-                    simulatedProgress++
-                    onProgress(simulatedProgress)
-                }
-            }, incrementInterval)
+        const maxBytes = getDownloadMaxBytes(options)
+        const response = await axios.get(url, {
+            responseType: 'stream',
+            timeout: options?.timeoutMs ?? 60000
+        })
+        const contentLength = getHeaderNumber(response.headers, 'content-length')
+
+        if (contentLength && contentLength > maxBytes) {
+            throw new DownloadSizeLimitError(`Download excede o limite de ${maxBytes} bytes`)
         }
-        
-        try {
-            const response = await axios.get(url, {
-                responseType: 'arraybuffer',
-                timeout: 60000
-            })
-            
-            if (progressInterval) clearInterval(progressInterval)
-            if (onProgress) onProgress(100)
-            
-            return Buffer.from(response.data)
-        } catch (error) {
-            if (progressInterval) clearInterval(progressInterval)
-            throw error
+
+        if (response.data instanceof Readable) {
+            return await bufferFromStreamWithLimit(response.data, maxBytes, onProgress, contentLength)
         }
+
+        const buffer = Buffer.from(response.data)
+        if (buffer.length > maxBytes) {
+            throw new DownloadSizeLimitError(`Download excede o limite de ${maxBytes} bytes`)
+        }
+
+        if (onProgress) onProgress(100)
+        return buffer
     } catch(err) {
+        if (err instanceof DownloadSizeLimitError) {
+            throw err
+        }
+
         showConsoleLibraryError(err, 'downloadFromUrl')
         throw new Error(botTexts.library_error)
     }
@@ -341,6 +409,7 @@ export async function downloadYouTubeVideo(videoUrl: string, onProgress?: (perce
         
         const { spawn } = require('child_process')
         const fs = require('fs')
+        const maxBytes = getYouTubeMaxBytes()
         
         const tempFilePath = path.join('/tmp', `yt-${Date.now()}.mp4`)
         console.log('[downloadYouTubeVideo] 📂 Arquivo temporário:', tempFilePath)
@@ -354,7 +423,7 @@ export async function downloadYouTubeVideo(videoUrl: string, onProgress?: (perce
             '--progress',
             '-f', 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
             '--no-playlist',
-            '--no-check-certificate',
+            '--max-filesize', String(maxBytes),
             '--prefer-free-formats',
             '--concurrent-fragments', '16',
             '--buffer-size', '128K',
@@ -429,6 +498,13 @@ export async function downloadYouTubeVideo(videoUrl: string, onProgress?: (perce
                     }
                     
                     console.log('[downloadYouTubeVideo] 📂 Lendo arquivo...')
+                    const stats = fs.statSync(tempFilePath)
+                    if (stats.size > maxBytes) {
+                        try { fs.unlinkSync(tempFilePath) } catch {}
+                        reject(new Error(`Download excede o limite de ${maxBytes} bytes`))
+                        return
+                    }
+
                     const buffer = fs.readFileSync(tempFilePath)
                     console.log(`[downloadYouTubeVideo] ✅ Buffer criado: ${buffer.length} bytes`)
                     

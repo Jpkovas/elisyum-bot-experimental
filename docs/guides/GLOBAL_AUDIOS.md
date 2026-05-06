@@ -149,10 +149,11 @@ if (audio.owner_jid !== message.sender) {
 
 O script de migração:
 1. Detecta automaticamente se a migração é necessária
-2. Cria tabela temporária com nova estrutura
-3. Copia dados, **mantendo apenas o primeiro áudio de cada nome** (por data de criação)
-4. Remove duplicatas automaticamente
-5. Atualiza índices do banco
+2. Cria backup completo em `saved_audios_migration_backup`
+3. Registra conflitos de nomes duplicados em `saved_audios_migration_conflicts`
+4. Cria tabela temporária com nova estrutura
+5. Copia dados, **mantendo apenas o áudio mais recente de cada nome** para o catálogo global
+6. Atualiza índices do banco
 
 ### Como Executar
 ```bash
@@ -163,6 +164,8 @@ bun run scripts/migrate-audios-to-global.ts
 ```
 [MIGRAÇÃO] Iniciando migração de áudios para sistema global...
 [MIGRAÇÃO] 📊 Estrutura antiga detectada. Iniciando migração...
+[MIGRAÇÃO] 🧾 Backup completo salvo em saved_audios_migration_backup
+[MIGRAÇÃO] ⚠️ X registros duplicate gravados em saved_audios_migration_conflicts
 [MIGRAÇÃO] 🔨 Tabela temporária criada
 [MIGRAÇÃO] 📦 X/Y áudios migrados (duplicatas removidas)
 [MIGRAÇÃO] 🗑️ Tabela antiga removida
@@ -189,7 +192,7 @@ bun run scripts/migrate-audios-to-global.ts
 
 3. **Instalar dependências**
    ```bash
-   bun install
+   bun install --frozen-lockfile
    ```
 
 4. **Executar migração**
@@ -212,8 +215,10 @@ bun run scripts/migrate-audios-to-global.ts
 ## ⚠️ Notas Importantes
 
 ### Conflitos de Nomes
-- Se dois usuários tinham áudios com o mesmo nome, a migração **mantém apenas o mais antigo**
-- Recomenda-se avisar usuários para verificar seus áudios após migração
+- Se dois usuários tinham áudios com o mesmo nome, a migração **mantém o mais recente** no catálogo global
+- Todos os registros antigos ficam preservados em `saved_audios_migration_backup`
+- Os nomes duplicados ficam auditáveis em `saved_audios_migration_conflicts`
+- Recomenda-se revisar a tabela de conflitos e avisar usuários quando necessário
 - Nomes agora são únicos globalmente - não é mais possível ter duplicatas
 
 ### Comportamento em Grupos

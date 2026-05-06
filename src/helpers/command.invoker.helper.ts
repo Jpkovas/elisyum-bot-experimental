@@ -17,6 +17,37 @@ import { findSimilarCommand } from "./command.fuzzy.helper.js";
 import { askGemini } from "../utils/ai.util.js";
 import { UserController } from "../controllers/user.controller.js";
 import { resolveCommandAlias } from "../utils/command.aliases.util.js";
+import { RoleString } from "../types/permission.types.js";
+import { hashForLog } from "../utils/privacy.util.js";
+
+function getPermissionDeniedMessage(roles?: RoleString[]){
+    if (!roles?.length) {
+        return botTexts.permission.owner_only
+    }
+
+    if (roles.length === 1 && roles[0] === 'owner') {
+        return botTexts.permission.owner_only
+    }
+
+    if (roles.includes('group_moderator')) {
+        return botTexts.permission.group_admin
+    }
+
+    return botTexts.permission.owner_only
+}
+
+function assertCommandPermission(command: Commands[string], message: Message){
+    if (!command.permissions) {
+        return
+    }
+
+    const permissionService = new PermissionService()
+    const hasPermission = permissionService.hasPermission(message, command.permissions.roles)
+
+    if (!hasPermission) {
+        throw new Error(getPermissionDeniedMessage(command.permissions.roles))
+    }
+}
 
 export async function commandInvoker(client: WASocket, botInfo: Bot, message: Message, group: Group|null){
     const isGuide = (!message.args.length) ? false : message.args[0] === 'guia'
@@ -50,7 +81,9 @@ export async function commandInvoker(client: WASocket, botInfo: Bot, message: Me
                 //Categoria INFO
                 if (Object.keys(infoCommands).includes(commandName)){
                     const commands = infoCommands as Commands
-                    await commands[commandName].function(client, botInfo, message, group || undefined)
+                    const command = commands[commandName]
+                    assertCommandPermission(command, message)
+                    await command.function(client, botInfo, message, group || undefined)
                     showCommandConsole(message.isGroupMsg, "INFO", message.command, "#8ac46e", message.t, message.pushname, group?.name)
                     logsDb.log({ userJid: message.sender, userName: message.pushname, command: commandName, args: message.text_command, chatId: message.chat_id, isGroup: message.isGroupMsg, success: true })
                 }
@@ -60,7 +93,9 @@ export async function commandInvoker(client: WASocket, botInfo: Bot, message: Me
                 //Categoria UTILIDADE
                 if (Object.keys(utilityCommands).includes(commandName)){
                     const commands = utilityCommands as Commands
-                    await commands[commandName].function(client, botInfo, message, group || undefined)
+                    const command = commands[commandName]
+                    assertCommandPermission(command, message)
+                    await command.function(client, botInfo, message, group || undefined)
                     showCommandConsole(message.isGroupMsg, "UTILIDADE", message.command, "#de9a07", message.t, message.pushname, group?.name)
                     logsDb.log({ userJid: message.sender, userName: message.pushname, command: commandName, args: message.text_command, chatId: message.chat_id, isGroup: message.isGroupMsg, success: true })
                 }
@@ -71,20 +106,10 @@ export async function commandInvoker(client: WASocket, botInfo: Bot, message: Me
                 if (!message.isGroupMsg || !group) {
                     throw new Error(botTexts.permission.group)
                 } else if (Object.keys(groupCommands).includes(commandName)){
-                    const command = (groupCommands as any)[commandName]
-                    
-                    // Verificar permissões usando o PermissionService
-                    if (command.permissions) {
-                        const permissionService = new PermissionService()
-                        const hasPermission = permissionService.hasPermission(message, command.permissions.roles)
-                        
-                        if (!hasPermission) {
-                            throw new Error(botTexts.permission.group_admin)
-                        }
-                    }
-                    
                     const commands = groupCommands as Commands
-                    await commands[commandName].function(client, botInfo, message, group)
+                    const command = commands[commandName]
+                    assertCommandPermission(command, message)
+                    await command.function(client, botInfo, message, group)
                     showCommandConsole(message.isGroupMsg, "GRUPO", message.command, "#e0e031", message.t, message.pushname, group?.name)
                     logsDb.log({ userJid: message.sender, userName: message.pushname, command: commandName, args: message.text_command, chatId: message.chat_id, isGroup: message.isGroupMsg, success: true })
                 }
@@ -93,20 +118,10 @@ export async function commandInvoker(client: WASocket, botInfo: Bot, message: Me
             case 'admin':
                 //Categoria ADMIN
                 if (Object.keys(adminCommands).includes(commandName)){
-                    const command = (adminCommands as any)[commandName]
-                    
-                    // Verificar permissões usando o PermissionService
-                    if (command.permissions) {
-                        const permissionService = new PermissionService()
-                        const hasPermission = permissionService.hasPermission(message, command.permissions.roles)
-                        
-                        if (!hasPermission) {
-                            throw new Error(botTexts.permission.owner_only)
-                        }
-                    }
-                    
                     const commands = adminCommands as Commands
-                    await commands[commandName].function(client, botInfo, message, group || undefined)
+                    const command = commands[commandName]
+                    assertCommandPermission(command, message)
+                    await command.function(client, botInfo, message, group || undefined)
                     showCommandConsole(message.isGroupMsg, "ADMINISTRAÇÃO", message.command, "#d1d1d1", message.t, message.pushname, group?.name)
                     logsDb.log({ userJid: message.sender, userName: message.pushname, command: commandName, args: message.text_command, chatId: message.chat_id, isGroup: message.isGroupMsg, success: true })
                 }
@@ -148,7 +163,7 @@ export async function commandInvoker(client: WASocket, botInfo: Bot, message: Me
             // Se usuário configurou 'with-ai' OU errou 2+ vezes, invocar assistente
             if (helpLevel === 'with-ai' || recentErrors.length >= 2) {
                 if (recentErrors.length >= 2) {
-                    console.log(`[ADAPTIVE] 🤖 Usuário ${message.pushname} errou ${commandName} ${recentErrors.length}x. Invocando assistente...`)
+                    console.log(`[ADAPTIVE] 🤖 Usuário ${hashForLog(message.sender)} errou ${commandName} ${recentErrors.length}x. Invocando assistente...`)
                 } else {
                     console.log(`[HELP-LEVEL] 🤖 Usuário configurou 'with-ai'. Invocando assistente...`)
                 }

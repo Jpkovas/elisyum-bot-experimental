@@ -7,9 +7,9 @@ dev = true
 exact = false
 
 [install.scripts]
-# Sempre executar install scripts (necessário para sharp, canvas, etc)
+# Permite apenas install scripts conhecidos que o projeto precisa em build/deploy.
 disable = false
-allowList = ["*"]
+allowList = ["canvas", "@napi-rs/image", "@ffmpeg-installer/ffmpeg"]
 
 [install.cache]
 # Habilita cache de instalação

@@ -1,6 +1,7 @@
 import { WASocket } from '@whiskeysockets/baileys'
 import { GroupController } from '../controllers/group.controller.js'
 import { getCurrentBotVersion } from '../utils/general.util.js'
+import { hashForLog } from '../utils/privacy.util.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -8,7 +9,57 @@ interface VersionInfo {
     lastNotifiedVersion: string
 }
 
+export interface PatchNotesNotificationDecision {
+    hasPatchNotes: boolean
+    groupCount: number
+    errorCount: number
+}
+
 const VERSION_FILE = path.join(process.cwd(), 'storage', 'last-version.json')
+const DEFAULT_PATCH_NOTES_SEND_DELAY_MS = 2000
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function extractPatchNotesFromChangelog(changelog: string, currentVersion: string): string | null {
+    const versionRegex = new RegExp(`^##\\s+v?${escapeRegExp(currentVersion)}(?![\\d.])[^\\n]*\\n`, 'm')
+    const match = versionRegex.exec(changelog)
+
+    if (!match) {
+        return null
+    }
+
+    const contentStart = match.index + match[0].length
+    const remainingChangelog = changelog.slice(contentStart)
+    const nextVersionMatch = /^##\s+/m.exec(remainingChangelog)
+    const contentEnd = nextVersionMatch ? contentStart + nextVersionMatch.index : changelog.length
+    const notes = changelog.slice(contentStart, contentEnd).trim()
+
+    return notes || null
+}
+
+export function shouldMarkPatchNotesVersionNotified(decision: PatchNotesNotificationDecision) {
+    if (!decision.hasPatchNotes) {
+        return false
+    }
+
+    if (decision.groupCount === 0) {
+        return true
+    }
+
+    return decision.errorCount === 0
+}
+
+function getPatchNotesSendDelayMs() {
+    const configuredDelay = Number(process.env.PATCH_NOTES_SEND_DELAY_MS)
+
+    if (Number.isFinite(configuredDelay) && configuredDelay >= 0) {
+        return configuredDelay
+    }
+
+    return DEFAULT_PATCH_NOTES_SEND_DELAY_MS
+}
 
 /**
  * Lê a última versão que teve patch notes enviadas
@@ -32,6 +83,7 @@ function getLastNotifiedVersion(): string | null {
 function saveLastNotifiedVersion(version: string): void {
     try {
         const versionInfo: VersionInfo = { lastNotifiedVersion: version }
+        fs.mkdirSync(path.dirname(VERSION_FILE), { recursive: true })
         fs.writeFileSync(VERSION_FILE, JSON.stringify(versionInfo, null, 2), 'utf8')
         console.log(`[PatchNotes] Versão ${version} salva como última notificada`)
     } catch (err) {
@@ -70,24 +122,11 @@ function getCurrentPatchNotes(currentVersion: string): string | null {
         const changelog = fs.readFileSync(changelogPath, 'utf8')
         console.log('[PatchNotes] CHANGELOG lido com sucesso, tamanho:', changelog.length, 'caracteres')
         
-        // Procura pela seção da versão atual (aceita versão com ou sem data/texto adicional)
-        // Importante: o lookahead precisa incluir o espaço após ## para funcionar corretamente
-        // Não use |$ na alternativa pois com *? lazy ele faz match vazio imediatamente
-        const versionRegex = new RegExp(`## ${currentVersion.replace(/\./g, '\\.')}[^\\n]*\\n([\\s\\S]*?)(?=\\n## )`, 'm')
-        console.log('[PatchNotes] Regex:', versionRegex.source)
-        const match = changelog.match(versionRegex)
-        console.log('[PatchNotes] Match encontrado:', match ? 'SIM' : 'NÃO')
+        const patchNotes = extractPatchNotesFromChangelog(changelog, currentVersion)
         
-        if (match) {
-            console.log('[PatchNotes] match[0] (match completo):', match[0] ? match[0].substring(0, 150) : 'undefined')
-            console.log('[PatchNotes] match[1] (grupo captura):', match[1] ? `"${match[1].substring(0, 100)}"` : 'undefined/vazio')
-            console.log('[PatchNotes] match[1] length:', match[1]?.length || 0)
-            console.log('[PatchNotes] match[1] trimmed length:', match[1]?.trim().length || 0)
-        }
-        
-        if (match && match[1] && match[1].trim()) {
+        if (patchNotes) {
             console.log('[PatchNotes] ✓ Conteúdo extraído com sucesso')
-            return match[1].trim()
+            return patchNotes
         }
         
         console.log(`[PatchNotes] Patch notes para versão ${currentVersion} não encontradas no CHANGELOG`)
@@ -132,8 +171,6 @@ export async function checkAndNotifyPatchNotes(client: WASocket): Promise<void> 
         
         if (!patchNotes) {
             console.log('[PatchNotes] Nenhuma patch note encontrada para esta versão')
-            // Salva a versão mesmo sem patch notes para não verificar novamente
-            saveLastNotifiedVersion(currentVersion)
             return
         }
 
@@ -146,7 +183,9 @@ export async function checkAndNotifyPatchNotes(client: WASocket): Promise<void> 
 
         if (!allGroups || allGroups.length === 0) {
             console.log('[PatchNotes] Nenhum grupo encontrado')
-            saveLastNotifiedVersion(currentVersion)
+            if (shouldMarkPatchNotesVersionNotified({ hasPatchNotes: true, groupCount: 0, errorCount: 0 })) {
+                saveLastNotifiedVersion(currentVersion)
+            }
             return
         }
 
@@ -154,33 +193,39 @@ export async function checkAndNotifyPatchNotes(client: WASocket): Promise<void> 
 
         let successCount = 0
         let errorCount = 0
+        const sendDelayMs = getPatchNotesSendDelayMs()
 
         // Envia a mensagem em cada grupo
         for (const group of allGroups) {
             try {
-                console.log(`[PatchNotes] Tentando enviar para: ${group.name} (${group.id})`)
+                console.log(`[PatchNotes] Tentando enviar para grupo ${hashForLog(group.id)}`)
                 
                 // Envia a mensagem
                 await client.sendMessage(group.id, { 
                     text: message 
                 })
 
-                console.log(`[PatchNotes] ✅ Enviado em: ${group.name}`)
+                console.log(`[PatchNotes] Enviado para grupo ${hashForLog(group.id)}`)
                 successCount++
 
                 // Aguarda 2 segundos entre cada grupo para evitar spam
-                await new Promise(resolve => setTimeout(resolve, 2000))
+                if (sendDelayMs > 0) {
+                    await new Promise(resolve => setTimeout(resolve, sendDelayMs))
+                }
 
             } catch (err) {
-                console.error(`[PatchNotes] ❌ Erro ao enviar para ${group.name}:`, err)
+                console.error(`[PatchNotes] Erro ao enviar para grupo ${hashForLog(group.id)}:`, err)
                 errorCount++
             }
         }
 
         console.log(`[PatchNotes] Conclusão: ${successCount} sucessos, ${errorCount} erros`)
 
-        // Salva a versão como notificada
-        saveLastNotifiedVersion(currentVersion)
+        if (shouldMarkPatchNotesVersionNotified({ hasPatchNotes: true, groupCount: allGroups.length, errorCount })) {
+            saveLastNotifiedVersion(currentVersion)
+        } else {
+            console.warn(`[PatchNotes] Versão ${currentVersion} não será marcada como notificada; grupos com erro serão tentados novamente`)
+        }
 
     } catch (err) {
         console.error('[PatchNotes] Erro geral:', err)

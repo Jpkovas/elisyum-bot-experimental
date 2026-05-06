@@ -1,5 +1,6 @@
 import { isJidNewsletter, type MessageUpsertType, type WAMessage, type WASocket } from '@whiskeysockets/baileys'
 import { colorText, showConsoleError, timestampToDate } from '../utils/general.util.js'
+import { hashForLog, safeCount } from '../utils/privacy.util.js'
 
 export type NewsletterMessageBatch = {
     messages: WAMessage[]
@@ -48,11 +49,11 @@ export async function logNewsletterMessages(_client: WASocket, batch: Newsletter
 
             console.log(
                 colorText('[NEWSLETTER]', '#8c7ae6'),
-                colorText(remoteJid || 'unknown', '#4cd137'),
-                serverId ? colorText(String(serverId), '#487eb0') : colorText('-', '#487eb0'),
+                colorText(hashForLog(remoteJid) || 'unknown', '#4cd137'),
+                serverId ? colorText(hashForLog(String(serverId)) || '-', '#487eb0') : colorText('-', '#487eb0'),
                 colorText(batch.type, '#fbc531'),
                 colorText(timestamp, '#00a8ff'),
-                text ? colorText(text, '#e1b12c') : ''
+                text ? colorText(`text_len:${safeCount(text)}`, '#e1b12c') : ''
             )
         }
     } catch (err: any) {

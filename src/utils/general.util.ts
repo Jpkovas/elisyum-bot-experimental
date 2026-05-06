@@ -198,21 +198,42 @@ export function getTextOrQuotedText(message: Message): string {
   return message.text_command
 }
 
+type DownloadPlatform = 'youtube' | 'instagram' | 'facebook' | 'tiktok' | 'twitter' | 'unknown'
+
+function parseHostname(rawUrl: string) {
+  try {
+    const parsedUrl = new URL(rawUrl)
+    return parsedUrl.hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function hostMatches(hostname: string, hosts: string[], includeSubdomains = true) {
+  return hosts.some(host => {
+    return hostname === host || (includeSubdomains && hostname.endsWith(`.${host}`))
+  })
+}
+
 /**
- * Detecta a plataforma de uma URL
+ * Detecta a plataforma de uma URL validando o hostname real.
  */
-export function detectPlatform(url: string): 'youtube' | 'instagram' | 'facebook' | 'tiktok' | 'twitter' | 'unknown' {
-  const urlLower = url.toLowerCase()
-  
-  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+export function detectPlatform(url: string): DownloadPlatform {
+  const hostname = parseHostname(url)
+
+  if (!hostname) {
+    return 'unknown'
+  }
+
+  if (hostMatches(hostname, ['youtube.com', 'youtube-nocookie.com']) || hostname === 'youtu.be') {
     return 'youtube'
-  } else if (urlLower.includes('instagram.com')) {
+  } else if (hostMatches(hostname, ['instagram.com'])) {
     return 'instagram'
-  } else if (urlLower.includes('facebook.com') || urlLower.includes('fb.watch') || urlLower.includes('fb.com')) {
+  } else if (hostMatches(hostname, ['facebook.com', 'fb.com']) || hostname === 'fb.watch') {
     return 'facebook'
-  } else if (urlLower.includes('tiktok.com') || urlLower.includes('vt.tiktok.com')) {
+  } else if (hostMatches(hostname, ['tiktok.com']) || hostname === 'vt.tiktok.com' || hostname === 'vm.tiktok.com') {
     return 'tiktok'
-  } else if (urlLower.includes('twitter.com') || urlLower.includes('x.com')) {
+  } else if (hostMatches(hostname, ['twitter.com', 'x.com'])) {
     return 'twitter'
   }
   
@@ -223,5 +244,4 @@ export function getFirstSupportedDownloadUrl(text: string): string | null {
   const urls = extractUrls(text)
   return urls.find(url => detectPlatform(url) !== 'unknown') || null
 }
-
 

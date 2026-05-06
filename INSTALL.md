@@ -1,14 +1,16 @@
 # 🚀 Instalação Rápida - Elisyum Bot
 
-## Um Comando, Tudo Instalado!
+## Instalação com Script Local Revisável
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main/scripts/setup/install.sh | bash
+git clone https://github.com/paulocesarcustodio/elisyum-bot.git
+cd elisyum-bot
+./scripts/setup/install.sh
 ```
 
 **Isso vai:**
-- ✅ Clonar o repositório automaticamente
-- ✅ Instalar Bun (se necessário)
+- ✅ Usar o script versionado dentro do repositório clonado
+- ✅ Validar Bun já instalado
 - ✅ Instalar FFmpeg
 - ✅ Instalar todas as dependências
 - ✅ Compilar o TypeScript
@@ -34,8 +36,18 @@ nano .env
 # Números dos administradores (com código do país)
 ADMIN_NUMBERS="5519983084398"
 
+# Token de uso unico para cadastrar o primeiro dono com !admin <token>
+BOT_OWNER_BOOTSTRAP_TOKEN=""
+
 # API Deepgram (opcional - para transcrição de áudio)
 DEEPGRAM_API_KEY=""
+
+# APIs opcionais usadas por comandos de filme, clima e reconhecimento musical
+TMDB_API_KEY=""
+WEATHER_API_KEY=""
+ACRCLOUD_HOST=""
+ACRCLOUD_ACCESS_KEY=""
+ACRCLOUD_SECRET_KEY=""
 ```
 
 ### 3️⃣ Inicie o bot
@@ -87,13 +99,13 @@ Se algo der errado, veja a [documentação completa](docs/guides/INSTALLATION.md
 Se preferir revisar o script antes de executar:
 
 ```bash
-# Baixe o script
-curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main/scripts/setup/install.sh -o install.sh
+# Clone o repositório e entre nele
+git clone https://github.com/paulocesarcustodio/elisyum-bot.git
+cd elisyum-bot
 
 # Revise o conteúdo
-cat install.sh
+less scripts/setup/install.sh
 
 # Execute manualmente
-chmod +x install.sh
-./install.sh
+./scripts/setup/install.sh
 ```

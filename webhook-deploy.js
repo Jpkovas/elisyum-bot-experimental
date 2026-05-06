@@ -1,97 +1,203 @@
 #!/usr/bin/env bun
-// Webhook server para deploy automático
+// Webhook server para deploy automatico
 import { createServer } from 'http';
-import { exec } from 'child_process';
-import { createHmac } from 'crypto';
+import { spawn } from 'child_process';
+import { createHmac, timingSafeEqual } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
-const PORT = process.env.WEBHOOK_PORT || 3001;
-const SECRET = process.env.WEBHOOK_SECRET || 'change-me-in-production';
-const DEPLOY_PATH = process.env.DEPLOY_PATH || '/root/elisyum-bot';
+const DEFAULT_PORT = 3001;
+const DEFAULT_DEPLOY_PATH = '/root/elisyum-bot';
+const DEFAULT_BUN_BIN = '/root/.bun/bin/bun';
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
-console.log('🚀 Webhook Deploy Server');
-console.log('=======================');
-console.log(`Port: ${PORT}`);
-console.log(`Path: ${DEPLOY_PATH}`);
-console.log('Listening for GitHub webhooks...\n');
+function requiredEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
 
-createServer((req, res) => {
-  if (req.method !== 'POST' || req.url !== '/webhook') {
-    res.writeHead(404);
-    return res.end('Not Found');
+function parsePort(value) {
+  const port = Number(value || DEFAULT_PORT);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('WEBHOOK_PORT must be a valid TCP port');
+  }
+  return port;
+}
+
+function parseMaxBodyBytes(value) {
+  const maxBytes = Number(value || DEFAULT_MAX_BODY_BYTES);
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error('WEBHOOK_MAX_BODY_BYTES must be a positive integer');
+  }
+  return maxBytes;
+}
+
+function getDeployPath() {
+  const configuredPath = process.env.DEPLOY_PATH || DEFAULT_DEPLOY_PATH;
+  if (!path.isAbsolute(configuredPath)) {
+    throw new Error('DEPLOY_PATH must be absolute');
+  }
+  return path.resolve(configuredPath);
+}
+
+export function verifyGitHubSignature(signatureHeader, secret, body) {
+  const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+  if (!signature || !signature.startsWith('sha256=')) {
+    return false;
   }
 
-  let body = '';
-  req.on('data', chunk => body += chunk.toString());
-  
-  req.on('end', () => {
-    try {
-      // Verifica signature do GitHub
-      const signature = req.headers['x-hub-signature-256'];
-      if (!signature) {
-        console.error('❌ Missing signature');
-        res.writeHead(401);
-        return res.end('Unauthorized');
+  const expected = Buffer.from(`sha256=${createHmac('sha256', secret).update(body).digest('hex')}`);
+  const received = Buffer.from(signature);
+
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+function readBody(req, maxBodyBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let totalBytes = 0;
+    let rejected = false;
+
+    req.on('data', chunk => {
+      if (rejected) {
+        return;
       }
 
-      const hash = `sha256=${createHmac('sha256', SECRET).update(body).digest('hex')}`;
-      if (signature !== hash) {
-        console.error('❌ Invalid signature');
+      totalBytes += chunk.length;
+      if (totalBytes > maxBodyBytes) {
+        rejected = true;
+        const error = new Error('Payload too large');
+        error.statusCode = 413;
+        reject(error);
+        req.destroy();
+        return;
+      }
+
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      if (!rejected) {
+        resolve(Buffer.concat(chunks).toString('utf8'));
+      }
+    });
+
+    req.on('error', error => {
+      if (!rejected) {
+        reject(error);
+      }
+    });
+  });
+}
+
+function runStep(command, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, shell: false });
+    const stdout = [];
+    const stderr = [];
+
+    child.stdout.on('data', chunk => stdout.push(chunk));
+    child.stderr.on('data', chunk => stderr.push(chunk));
+    child.on('error', reject);
+    child.on('close', code => {
+      const output = Buffer.concat(stdout).toString('utf8');
+      const errorOutput = Buffer.concat(stderr).toString('utf8');
+
+      if (code !== 0) {
+        const error = new Error(`${command} ${args.join(' ')} failed with exit code ${code}`);
+        error.stdout = output;
+        error.stderr = errorOutput;
+        reject(error);
+        return;
+      }
+
+      if (output) console.log(output.trim());
+      if (errorOutput) console.error(errorOutput.trim());
+      resolve({ stdout: output, stderr: errorOutput });
+    });
+  });
+}
+
+async function runDeploy(deployPath, bunBin) {
+  await runStep('git', ['pull', 'origin', 'main'], deployPath);
+  await runStep(bunBin, ['install', '--frozen-lockfile'], deployPath);
+  const beforePreflight = await runStep(bunBin, ['run', 'preflight:storage'], deployPath);
+  fs.writeFileSync(path.join(deployPath, 'storage-preflight.before.json'), beforePreflight.stdout);
+  await runStep(bunBin, ['run', 'build'], deployPath);
+  const afterPreflight = await runStep(bunBin, ['run', 'preflight:storage'], deployPath);
+  fs.writeFileSync(path.join(deployPath, 'storage-preflight.after.json'), afterPreflight.stdout);
+  await runStep('systemctl', ['restart', 'lbot'], deployPath);
+}
+
+export function createWebhookHandler({ secret, deployPath, bunBin, maxBodyBytes }) {
+  return async (req, res) => {
+    if (req.method !== 'POST' || req.url !== '/webhook') {
+      res.writeHead(404);
+      res.end('Not Found');
+      return;
+    }
+
+    try {
+      const body = await readBody(req, maxBodyBytes);
+      if (!verifyGitHubSignature(req.headers['x-hub-signature-256'], secret, body)) {
+        console.error('Invalid webhook signature');
         res.writeHead(401);
-        return res.end('Unauthorized');
+        res.end('Unauthorized');
+        return;
       }
 
       const payload = JSON.parse(body);
-      
-      // Só executa deploy em push para main
       if (payload.ref !== 'refs/heads/main') {
-        console.log(`ℹ️ Ignoring push to ${payload.ref}`);
+        console.log(`Ignoring push to ${payload.ref}`);
         res.writeHead(200);
-        return res.end('OK - Ignored');
+        res.end('OK - Ignored');
+        return;
       }
 
-      console.log('🎯 Deploy triggered!');
-      console.log(`   Commit: ${payload.head_commit.message}`);
-      console.log(`   Author: ${payload.pusher.name}`);
-
+      console.log('Deploy triggered');
       res.writeHead(200);
       res.end('OK - Deploying');
 
-      // Executa deploy
-      const deployScript = `
-        cd ${DEPLOY_PATH}
-        echo "🔄 Pulling changes..."
-        git pull origin main
-        echo "📦 Installing dependencies..."
-        /root/.bun/bin/bun install --frozen-lockfile
-        echo "🧾 Generating storage preflight (before build)..."
-        /root/.bun/bin/bun run preflight:storage > storage-preflight.before.json
-        echo "🔨 Building..."
-        /root/.bun/bin/bun run build
-        echo "🧾 Generating storage preflight (after build)..."
-        /root/.bun/bin/bun run preflight:storage > storage-preflight.after.json
-        echo "🔄 Restarting bot service..."
-        systemctl restart lbot
-        echo "✅ Deploy completed!"
-      `;
-
-      exec(deployScript, (error, stdout, stderr) => {
-        if (error) {
-          console.error('❌ Deploy failed:', error.message);
-          return;
-        }
-        if (stderr) console.error('stderr:', stderr);
-        console.log(stdout);
-        console.log('✅ Deploy successful!\n');
+      runDeploy(deployPath, bunBin).then(() => {
+        console.log('Deploy completed');
+      }).catch(error => {
+        console.error('Deploy failed:', error.message);
+        if (error.stderr) console.error(error.stderr);
       });
-
-    } catch (err) {
-      console.error('❌ Error:', err.message);
-      res.writeHead(500);
-      res.end('Internal Server Error');
+    } catch (error) {
+      const statusCode = error.statusCode || 500;
+      console.error('Webhook error:', error.message);
+      res.writeHead(statusCode);
+      res.end(statusCode === 413 ? 'Payload Too Large' : 'Internal Server Error');
     }
-  });
+  };
+}
 
-}).listen(PORT, () => {
-  console.log(`✅ Webhook server running on http://0.0.0.0:${PORT}/webhook`);
-  console.log(`📝 Configure GitHub webhook to: http://YOUR_PUBLIC_IP:${PORT}/webhook\n`);
-});
+export function startWebhookServer() {
+  const port = parsePort(process.env.WEBHOOK_PORT);
+  const secret = requiredEnv('WEBHOOK_SECRET');
+  const deployPath = getDeployPath();
+  const bunBin = process.env.BUN_BIN || DEFAULT_BUN_BIN;
+  const maxBodyBytes = parseMaxBodyBytes(process.env.WEBHOOK_MAX_BODY_BYTES);
+
+  const server = createServer(createWebhookHandler({ secret, deployPath, bunBin, maxBodyBytes }));
+  server.listen(port, () => {
+    console.log('Webhook Deploy Server');
+    console.log(`Port: ${port}`);
+    console.log(`Path: ${deployPath}`);
+    console.log(`Max body: ${maxBodyBytes} bytes`);
+  });
+  return server;
+}
+
+if (import.meta.main) {
+  try {
+    startWebhookServer();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+}

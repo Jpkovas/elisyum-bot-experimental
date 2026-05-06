@@ -353,7 +353,7 @@ export class ParticipantService {
     }
 
     public async removeParticipantsWarnings(groupId: string){
-        await db.updateAsync({group_id: groupId}, { $set: { warnings: 0} })
+        await db.updateAsync({group_id: groupId}, { $set: { warnings: 0} }, { multi: true })
     }
 
     public async expireParticipantAntiFlood(groupId: string, userId: string, newExpireTimestamp: number){

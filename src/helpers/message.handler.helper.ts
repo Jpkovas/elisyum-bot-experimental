@@ -74,6 +74,10 @@ export async function handlePrivateMessage(client: WASocket, botInfo: Bot, messa
         callCommand = false
         // Aviso documentado: informa ao usuário quando um comando com prefixo não foi encontrado no privado.
         if (hasUnknownPrefixedCommand) {
+            if (await procs.isUserLimitedByCommandRate(client, botInfo, message)) {
+                return false
+            }
+
             console.log(`[UNKNOWN-PV] ⚠️ Comando não encontrado: "${message.command}"`)
             
             // Tentar fuzzy match
@@ -89,6 +93,10 @@ export async function handlePrivateMessage(client: WASocket, botInfo: Bot, messa
                 // Não encontrou similar, invocar assistente
                 console.log(`[UNKNOWN-PV] 🤖 Nenhum comando similar encontrado. Consultando assistente...`)
                 let unknownCommandText = buildText(botTexts.unknown_command, message.command)
+
+                if (await procs.isUserLimitedByAiHelp(client, botInfo, message)) {
+                    return false
+                }
                 
                 try {
                     const aiHelp = await askGemini(
@@ -205,6 +213,10 @@ export async function handleGroupMessage(client: WASocket, group: Group, botInfo
 
         // Tentar fuzzy match antes de marcar como callCommand = false
         if (hasUnknownPrefixedCommand) {
+            if (await procs.isUserLimitedByCommandRate(client, botInfo, message)) {
+                return false
+            }
+
             console.log(`[UNKNOWN-GROUP] ⚠️ Comando não encontrado: "${message.command}"`)
             
             const commandName = waUtil.removePrefix(botInfo.prefix, message.command)
@@ -230,6 +242,10 @@ export async function handleGroupMessage(client: WASocket, group: Group, botInfo
                 if (!message.isBotMessage && !autoReplied) {
                     console.log(`[UNKNOWN-GROUP] 📝 Enviando sugestão do assistente...`)
                     let unknownCommandText = buildText(botTexts.unknown_command, message.command)
+
+                    if (await procs.isUserLimitedByAiHelp(client, botInfo, message)) {
+                        return false
+                    }
                     
                     try {
                         const aiHelp = await askGemini(

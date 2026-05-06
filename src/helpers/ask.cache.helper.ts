@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { askCacheDb } from '../database/db.js'
+import { safeCount } from '../utils/privacy.util.js'
 
 /**
  * Normaliza pergunta para aumentar hit rate do cache
@@ -75,11 +76,11 @@ export async function getCachedAnswer(
   const cached = results.find(r => r !== undefined)
   
   if (cached) {
-    console.log(`[ASK-CACHE] ✅ Cache HIT! Pergunta: "${question.substring(0, 50)}..." (${cached.hit_count}x usada)`)
+    console.log(`[ASK-CACHE] ✅ Cache HIT hash=${questionHash.slice(0, 12)} len=${safeCount(question)} hits=${cached.hit_count}`)
     return cached.answer
   }
   
-  console.log(`[ASK-CACHE] ❌ Cache MISS: "${question.substring(0, 50)}..."`)
+  console.log(`[ASK-CACHE] ❌ Cache MISS hash=${questionHash.slice(0, 12)} len=${safeCount(question)}`)
   return null
 }
 
@@ -96,7 +97,7 @@ export function setCachedAnswer(
   const questionHash = generateQuestionHash(question)
   
   askCacheDb.set(questionHash, question, answer, userType)
-  console.log(`[ASK-CACHE] 💾 Salvou resposta: "${question.substring(0, 50)}..." (${userType})`)
+  console.log(`[ASK-CACHE] 💾 Salvou resposta hash=${questionHash.slice(0, 12)} len=${safeCount(question)} user_type=${userType}`)
 }
 
 /**

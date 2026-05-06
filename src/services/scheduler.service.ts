@@ -5,7 +5,13 @@ import * as convertUtil from '../utils/convert.util.js'
 import { GroupController } from "../controllers/group.controller.js"
 import { performCacheMaintenance } from '../helpers/ask.cache.helper.js'
 
+type ScheduledTask = ReturnType<typeof cron.schedule>
+
 export class SchedulerService {
+    private static activeService: SchedulerService | null = null
+    private static initialized = false
+    private static scheduledTasks: ScheduledTask[] = []
+
     private client: WASocket
     private groupController: GroupController
 
@@ -18,24 +24,57 @@ export class SchedulerService {
      * Inicializa os agendamentos
      */
     public init() {
+        SchedulerService.activeService = this
+
+        if (SchedulerService.initialized) {
+            console.log('[Scheduler] Agendamentos já inicializados; cliente ativo atualizado')
+            return
+        }
+
         console.log('[Scheduler] 📅 Inicializando agendamentos do bot...')
         
         // Todo sábado às 12:00 (horário de Brasília)
-        cron.schedule('0 12 * * 6', async () => {
-            await this.sendKasinoVideo()
-        }, {
-            timezone: 'America/Sao_Paulo'
-        })
+        SchedulerService.scheduledTasks.push(
+            cron.schedule('0 12 * * 6', async () => {
+                await SchedulerService.activeService?.sendKasinoVideo()
+            }, {
+                timezone: 'America/Sao_Paulo'
+            })
+        )
 
         // Limpeza diária do cache de perguntas às 3:00 da manhã
-        cron.schedule('0 3 * * *', async () => {
-            performCacheMaintenance()
-        }, {
-            timezone: 'America/Sao_Paulo'
-        })
+        SchedulerService.scheduledTasks.push(
+            cron.schedule('0 3 * * *', async () => {
+                performCacheMaintenance()
+            }, {
+                timezone: 'America/Sao_Paulo'
+            })
+        )
+
+        SchedulerService.initialized = true
 
         console.log('[Scheduler] ✅ Agendamento do vídeo Kasino configurado para sábados às 12:00')
         console.log('[Scheduler] ✅ Agendamento de limpeza do cache ASK configurado para diariamente às 03:00')
+    }
+
+    public destroy() {
+        SchedulerService.destroyScheduledTasks()
+    }
+
+    public static resetForTests() {
+        SchedulerService.destroyScheduledTasks()
+    }
+
+    private static destroyScheduledTasks() {
+        for (const task of SchedulerService.scheduledTasks) {
+            const stoppableTask = task as { stop?: () => void, destroy?: () => void }
+            stoppableTask.stop?.()
+            stoppableTask.destroy?.()
+        }
+
+        SchedulerService.scheduledTasks = []
+        SchedulerService.initialized = false
+        SchedulerService.activeService = null
     }
 
     /**

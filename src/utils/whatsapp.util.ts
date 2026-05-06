@@ -570,14 +570,89 @@ export async function demoteParticipant(client: WASocket, groupId: string, parti
     return response
 }
 
+type MessageCacheLookupKey = string | {
+    id?: string | null
+    remoteJid?: string | null
+    participant?: string | null
+}
+
+function getMessageIdFromLookupKey(key: MessageCacheLookupKey) {
+    return typeof key === 'string' ? key : key.id || undefined
+}
+
+function getScopedMessageCacheKey(key: MessageCacheLookupKey) {
+    if (typeof key === 'string' || !key.id || !key.remoteJid) {
+        return null
+    }
+
+    return ['message', key.remoteJid, key.participant || '-', key.id].join(':')
+}
+
+function getMessageCacheScopesKey(messageId: string) {
+    return `message-scopes:${messageId}`
+}
+
+function storeScopedCacheValue<T>(cache: NodeCache, key: MessageCacheLookupKey, value: T) {
+    const messageId = getMessageIdFromLookupKey(key)
+
+    if (!messageId) {
+        return
+    }
+
+    const scopedKey = getScopedMessageCacheKey(key)
+
+    if (!scopedKey) {
+        cache.set(messageId, value)
+        return
+    }
+
+    const scopesKey = getMessageCacheScopesKey(messageId)
+    const scopes = (cache.get(scopesKey) as string[] | undefined) ?? []
+
+    if (!scopes.includes(scopedKey)) {
+        scopes.push(scopedKey)
+    }
+
+    cache.set(scopedKey, value)
+    cache.set(scopesKey, scopes)
+
+    if (scopes.length === 1) {
+        cache.set(messageId, value)
+    } else {
+        cache.del(messageId)
+    }
+}
+
+function getScopedCacheValue<T>(cache: NodeCache, key: MessageCacheLookupKey) {
+    const messageId = getMessageIdFromLookupKey(key)
+
+    if (!messageId) {
+        return undefined
+    }
+
+    const scopedKey = getScopedMessageCacheKey(key)
+
+    if (scopedKey) {
+        return cache.get(scopedKey) as T | undefined
+    }
+
+    const scopes = cache.get(getMessageCacheScopesKey(messageId)) as string[] | undefined
+
+    if (scopes && scopes.length > 1) {
+        return undefined
+    }
+
+    return cache.get(messageId) as T | undefined
+}
+
 export function storeMessageOnCache(message : proto.IWebMessageInfo, messageCache : NodeCache){
     if (message.key && message.key.remoteJid && message.key.id && message.message){
-        messageCache.set(message.key.id, message.message)
+        storeScopedCacheValue(messageCache, message.key, message.message)
     }    
 }
 
-export function getMessageFromCache(messageId: string, messageCache: NodeCache){
-    let message = messageCache.get(messageId) as proto.IMessage | undefined 
+export function getMessageFromCache(messageId: MessageCacheLookupKey, messageCache: NodeCache){
+    let message = getScopedCacheValue<proto.IMessage>(messageCache, messageId)
     return message
 }
 
@@ -585,15 +660,15 @@ export function storeViewOnceMessage(message: WAMessage, viewOnceCache: NodeCach
     if (message.key && message.key.id && message.message){
         const messageType = getContentType(message.message)
         if (messageType === 'viewOnceMessage' || messageType === 'viewOnceMessageV2' || messageType === 'viewOnceMessageV2Extension') {
-            viewOnceCache.set(message.key.id, message)
+            storeScopedCacheValue(viewOnceCache, message.key, message)
             return true
         }
     }
     return false
 }
 
-export function getViewOnceMessageFromCache(messageId: string, viewOnceCache: NodeCache): WAMessage | undefined {
-    return viewOnceCache.get(messageId) as WAMessage | undefined
+export function getViewOnceMessageFromCache(messageId: MessageCacheLookupKey, viewOnceCache: NodeCache): WAMessage | undefined {
+    return getScopedCacheValue<WAMessage>(viewOnceCache, messageId)
 }
 
 export async function formatWAMessage(m: WAMessage, group: Group|null, hostId: string, requestId?: string){

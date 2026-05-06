@@ -50,6 +50,54 @@ try {
   // Começa uma transação
   db.run('BEGIN TRANSACTION');
 
+  db.run('DROP TABLE IF EXISTS saved_audios_migration_backup');
+  db.run('CREATE TABLE saved_audios_migration_backup AS SELECT * FROM saved_audios');
+  console.log('[MIGRAÇÃO] 🧾 Backup completo salvo em saved_audios_migration_backup');
+
+  db.run('DROP TABLE IF EXISTS saved_audios_migration_conflicts');
+  db.run(`
+    CREATE TABLE saved_audios_migration_conflicts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      duplicate_audio_name TEXT NOT NULL,
+      old_audio_id INTEGER NOT NULL,
+      old_user_jid TEXT NOT NULL,
+      old_file_path TEXT NOT NULL,
+      old_mime_type TEXT NOT NULL,
+      old_seconds INTEGER,
+      old_ptt BOOLEAN DEFAULT 0,
+      old_created_at DATETIME,
+      conflict_reason TEXT NOT NULL,
+      recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.run(`
+    INSERT INTO saved_audios_migration_conflicts
+      (duplicate_audio_name, old_audio_id, old_user_jid, old_file_path, old_mime_type, old_seconds, old_ptt, old_created_at, conflict_reason)
+    SELECT
+      audio_name,
+      id,
+      user_jid,
+      file_path,
+      mime_type,
+      seconds,
+      ptt,
+      created_at,
+      'duplicate audio_name during global-audio migration'
+    FROM saved_audios
+    WHERE audio_name IN (
+      SELECT audio_name
+      FROM saved_audios
+      GROUP BY audio_name
+      HAVING COUNT(*) > 1
+    )
+  `);
+
+  const conflictCount = db.prepare('SELECT COUNT(*) as count FROM saved_audios_migration_conflicts').get() as { count: number };
+
+  if (conflictCount.count > 0) {
+    console.log(`[MIGRAÇÃO] ⚠️ ${conflictCount.count} registros duplicate gravados em saved_audios_migration_conflicts`);
+  }
+
   // 1. Cria tabela temporária com nova estrutura
   db.run(`
     CREATE TABLE saved_audios_new (
@@ -66,8 +114,8 @@ try {
 
   console.log('[MIGRAÇÃO] 🔨 Tabela temporária criada');
 
-  // 2. Copia dados, mantendo apenas o primeiro áudio de cada nome
-  // (prioriza por data de criação - o mais antigo)
+  // 2. Copia dados, mantendo apenas o áudio mais recente de cada nome.
+  // Todos os conflitos permanecem auditáveis no backup e na tabela de conflitos.
   db.run(`
     INSERT INTO saved_audios_new 
       (id, owner_jid, audio_name, file_path, mime_type, seconds, ptt, created_at)
@@ -82,7 +130,7 @@ try {
       created_at
     FROM saved_audios
     WHERE id IN (
-      SELECT MIN(id)
+      SELECT MAX(id)
       FROM saved_audios
       GROUP BY audio_name
     )
