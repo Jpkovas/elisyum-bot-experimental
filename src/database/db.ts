@@ -1,10 +1,45 @@
 import { Database } from 'bun:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import { hashForLog, redactText } from '../utils/privacy.util.js';
 
 const dataDir = path.join(process.cwd(), 'storage');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const audiosDir = path.join(dataDir, 'audios');
+
+function realpathIfPossible(targetPath: string) {
+  try {
+    return fs.realpathSync(targetPath);
+  } catch {
+    return path.resolve(targetPath);
+  }
+}
+
+function canonicalizeAudioPath(targetPath: string) {
+  if (fs.existsSync(targetPath)) {
+    return realpathIfPossible(targetPath);
+  }
+
+  const parentPath = path.dirname(targetPath);
+  return path.join(realpathIfPossible(parentPath), path.basename(targetPath));
+}
+
+export function resolveSavedAudioFilePath(filePath: string) {
+  const audioRoot = realpathIfPossible(audiosDir);
+  const rawResolvedPath = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(audioRoot, filePath);
+  const resolvedPath = canonicalizeAudioPath(rawResolvedPath);
+  const relativePath = path.relative(audioRoot, resolvedPath);
+
+  if (relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))) {
+    return resolvedPath;
+  }
+
+  throw new Error('Caminho de audio fora de storage/audios');
 }
 
 const dbPath = path.join(dataDir, 'bot.db');
@@ -129,15 +164,67 @@ try {
 db.run(`
   CREATE TABLE IF NOT EXISTS ask_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question_hash TEXT NOT NULL UNIQUE,
+    question_hash TEXT NOT NULL,
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
     user_type TEXT NOT NULL,
     hit_count INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(question_hash, user_type)
   )
 `);
+
+function hasUniqueIndex(tableName: string, expectedColumns: string[]) {
+  const indexes = db.prepare(`PRAGMA index_list(${tableName})`).all() as Array<{ name: string; unique: number }>;
+
+  return indexes.some((indexInfo) => {
+    if (!indexInfo.unique) {
+      return false;
+    }
+
+    const columns = db.prepare(`PRAGMA index_info(${indexInfo.name})`).all() as Array<{ name: string }>;
+    return columns.map(column => column.name).join('|') === expectedColumns.join('|');
+  });
+}
+
+try {
+  if (!hasUniqueIndex('ask_cache', ['question_hash', 'user_type'])) {
+    console.log('[DB] 🔧 Migrando ask_cache para UNIQUE(question_hash, user_type)...');
+    db.run('BEGIN TRANSACTION');
+    db.run(`
+      CREATE TABLE ask_cache_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question_hash TEXT NOT NULL,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        user_type TEXT NOT NULL,
+        hit_count INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(question_hash, user_type)
+      )
+    `);
+    db.run(`
+      INSERT INTO ask_cache_new
+        (id, question_hash, question, answer, user_type, hit_count, created_at, last_used_at)
+      SELECT id, question_hash, question, answer, user_type, hit_count, created_at, last_used_at
+      FROM ask_cache
+      WHERE id IN (
+        SELECT MAX(id)
+        FROM ask_cache
+        GROUP BY question_hash, user_type
+      )
+    `);
+    db.run('DROP TABLE ask_cache');
+    db.run('ALTER TABLE ask_cache_new RENAME TO ask_cache');
+    db.run('COMMIT');
+    console.log('[DB] ✅ Migração de ask_cache concluída');
+  }
+} catch (err) {
+  db.run('ROLLBACK');
+  console.log('[DB] ⚠️ Erro na migração de ask_cache:', err);
+}
 
 // Índices para performance
 db.run('CREATE INDEX IF NOT EXISTS idx_contacts_updated ON contacts(updated_at)');
@@ -185,7 +272,7 @@ export const contactsDb = {
       contact.lid || null
     );
     
-    console.log(`[DB] Contato salvo: ${contact.notify || contact.name || contact.jid}`);
+    console.log(`[DB] Contato salvo: ${hashForLog(contact.jid)} name_present=${Boolean(contact.notify || contact.name || contact.verifiedName)}`);
   },
 
   // Buscar contato do cache
@@ -256,14 +343,14 @@ export const logsDb = {
     `);
     
     stmt.run(
-      data.userJid,
-      data.userName || null,
+      hashForLog(data.userJid),
+      redactText(data.userName),
       data.command,
-      data.args || null,
-      data.chatId || null,
+      redactText(data.args),
+      hashForLog(data.chatId),
       data.isGroup ? 1 : 0,
       data.success !== false ? 1 : 0,
-      data.error || null
+      redactText(data.error)
     );
   },
 
@@ -275,7 +362,7 @@ export const logsDb = {
       ORDER BY timestamp DESC 
       LIMIT ?
     `);
-    return stmt.all(userJid, limit);
+    return stmt.all(hashForLog(userJid), limit);
   },
 
   // Buscar logs recentes
@@ -340,6 +427,7 @@ export const audiosDb = {
     ptt?: boolean;
   }) => {
     try {
+      const safeFilePath = resolveSavedAudioFilePath(data.filePath);
       const stmt = db.prepare(`
         INSERT INTO saved_audios 
         (owner_jid, audio_name, file_path, mime_type, seconds, ptt)
@@ -356,7 +444,7 @@ export const audiosDb = {
       stmt.run(
         data.ownerJid,
         data.audioName.toLowerCase(),
-        data.filePath,
+        safeFilePath,
         data.mimeType,
         data.seconds || null,
         data.ptt ? 1 : 0
@@ -413,6 +501,12 @@ export const audiosDb = {
     return result.count;
   },
 
+  countByOwner: (ownerJid: string) => {
+    const stmt = db.prepare('SELECT COUNT(*) as count FROM saved_audios WHERE owner_jid = ?');
+    const result = stmt.get(ownerJid) as { count: number };
+    return result.count;
+  },
+
   // Deletar áudio (global - verifica dono)
   delete: (audioName: string, requesterId?: string) => {
     const audio = audiosDb.get(audioName);
@@ -422,11 +516,12 @@ export const audiosDb = {
         throw new Error('Apenas o dono pode deletar este áudio');
       }
       
+      const safeFilePath = resolveSavedAudioFilePath(audio.file_path);
+
       // Remove arquivo físico
       try {
-        const fs = require('fs');
-        if (fs.existsSync(audio.file_path)) {
-          fs.unlinkSync(audio.file_path);
+        if (fs.existsSync(safeFilePath)) {
+          fs.unlinkSync(safeFilePath);
         }
       } catch (err) {
         console.error(`[DB] Erro ao deletar arquivo: ${err}`);
@@ -494,13 +589,14 @@ export const askCacheDb = {
   // Salvar resposta no cache
   set: (questionHash: string, question: string, answer: string, userType: string) => {
     const stmt = db.prepare(`
-      INSERT INTO ask_cache 
-      (question_hash, question, answer, user_type, hit_count, created_at, last_used_at)
-      VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT(question_hash) DO UPDATE SET 
-        answer = excluded.answer,
-        hit_count = hit_count + 1,
-        last_used_at = CURRENT_TIMESTAMP
+	      INSERT INTO ask_cache
+	      (question_hash, question, answer, user_type, hit_count, created_at, last_used_at)
+	      VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	      ON CONFLICT(question_hash, user_type) DO UPDATE SET
+	        question = excluded.question,
+	        answer = excluded.answer,
+	        hit_count = hit_count + 1,
+	        last_used_at = CURRENT_TIMESTAMP
     `);
     stmt.run(questionHash, question, answer, userType);
   },
@@ -552,17 +648,21 @@ export const askCacheDb = {
     const { count } = countStmt.get() as { count: number };
     
     const topStmt = db.prepare(`
-      SELECT question, hit_count, user_type, last_used_at 
+      SELECT question, question_hash, hit_count, user_type, last_used_at
       FROM ask_cache 
       ORDER BY hit_count DESC 
       LIMIT 10
     `);
-    const topQuestions = topStmt.all() as Array<{
+    const topQuestions = (topStmt.all() as Array<{
       question: string;
+      question_hash: string;
       hit_count: number;
       user_type: string;
       last_used_at: string;
-    }>;
+    }>).map(question => ({
+      ...question,
+      question: redactText(question.question) || `[hash=${question.question_hash.slice(0, 12)}]`,
+    }));
     
     return { total: count, topQuestions };
   },

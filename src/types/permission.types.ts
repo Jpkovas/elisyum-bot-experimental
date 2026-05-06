@@ -2,7 +2,7 @@
  * Sistema de Permissões Simplificado
  * 
  * Estrutura hierárquica de 3 roles:
- * - OWNER: Dono único do bot (primeiro a registrar com !admin)
+ * - OWNER: Dono único do bot (cadastrado no bootstrap com token)
  * - GROUP_MODERATOR: Administrador do grupo no WhatsApp
  * - MEMBER: Membro comum do grupo
  * 

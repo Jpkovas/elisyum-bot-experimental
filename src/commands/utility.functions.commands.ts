@@ -7,6 +7,49 @@ import * as waUtil from '../utils/whatsapp.util.js'
 import utilityCommands from "./utility.list.commands.js"
 import { UserController } from "../controllers/user.controller.js"
 
+const DEFAULT_SAVED_AUDIO_MAX_BYTES = 10 * 1024 * 1024
+const DEFAULT_SAVED_AUDIO_MAX_PER_USER = 25
+const DEFAULT_SAVED_AUDIO_MAX_TOTAL = 500
+const ALLOWED_SAVED_AUDIO_MIME_TYPES = new Set([
+    'audio/ogg',
+    'audio/ogg; codecs=opus',
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/mp4',
+])
+
+function getPositiveIntegerEnv(name: string, fallback: number) {
+    const rawValue = process.env[name]
+    const parsedValue = rawValue ? Number(rawValue) : fallback
+
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : fallback
+}
+
+function getMediaLengthBytes(fileLength?: unknown) {
+    if (typeof fileLength === 'number') {
+        return fileLength
+    }
+
+    if (typeof fileLength === 'bigint') {
+        return Number(fileLength)
+    }
+
+    if (fileLength && typeof fileLength === 'object') {
+        const lengthLike = fileLength as { toNumber?: () => number, toString?: () => string }
+
+        if (typeof lengthLike.toNumber === 'function') {
+            return lengthLike.toNumber()
+        }
+
+        if (typeof lengthLike.toString === 'function') {
+            const parsed = Number(lengthLike.toString())
+            return Number.isFinite(parsed) ? parsed : undefined
+        }
+    }
+
+    return undefined
+}
+
 export async function revelarCommand(client: WASocket, botInfo: Bot, message: Message, group? : Group){
     // Restrição silenciosa: apenas o dono pode usar
     if (!message.isBotOwner) {
@@ -95,9 +138,31 @@ export async function saveCommand(client: WASocket, botInfo: Bot, message: Messa
     }
 
     const audioName = message.text_command.trim().toLowerCase()
+    const quotedMedia = message.quotedMessage.media
+    const maxAudioBytes = getPositiveIntegerEnv('SAVED_AUDIO_MAX_BYTES', DEFAULT_SAVED_AUDIO_MAX_BYTES)
+    const maxAudiosPerUser = getPositiveIntegerEnv('SAVED_AUDIO_MAX_PER_USER', DEFAULT_SAVED_AUDIO_MAX_PER_USER)
+    const maxAudiosTotal = getPositiveIntegerEnv('SAVED_AUDIO_MAX_TOTAL', DEFAULT_SAVED_AUDIO_MAX_TOTAL)
+    const mimeType = quotedMedia?.mimetype || ''
+    const declaredLength = getMediaLengthBytes(quotedMedia?.file_length)
     
     if (audioName.length > 100) {
         throw new Error(utilityCommands.save.msgs.error_name_too_long)
+    }
+
+    if (!ALLOWED_SAVED_AUDIO_MIME_TYPES.has(mimeType)) {
+        throw new Error('Formato de áudio não suportado para salvar.')
+    }
+
+    if (declaredLength && declaredLength > maxAudioBytes) {
+        throw new Error(`Áudio grande demais para salvar. Limite: ${Math.floor(maxAudioBytes / 1024 / 1024)} MB.`)
+    }
+
+    if (audiosDb.countByOwner(message.sender) >= maxAudiosPerUser) {
+        throw new Error(`Você atingiu o limite de ${maxAudiosPerUser} áudios salvos.`)
+    }
+
+    if (audiosDb.count() >= maxAudiosTotal) {
+        throw new Error(`O limite global de ${maxAudiosTotal} áudios salvos foi atingido.`)
     }
 
     // Verifica se já existe um áudio com esse nome
@@ -108,6 +173,10 @@ export async function saveCommand(client: WASocket, botInfo: Bot, message: Messa
 
     // Baixa o áudio
     const audioBuffer = await waUtil.downloadMessageAsBuffer(client, message.quotedMessage.wa_message)
+
+    if (audioBuffer.length > maxAudioBytes) {
+        throw new Error(`Áudio grande demais para salvar. Limite: ${Math.floor(maxAudioBytes / 1024 / 1024)} MB.`)
+    }
     
     // Define caminho para salvar
     const audiosDir = path.join(process.cwd(), 'storage', 'audios')
@@ -124,15 +193,23 @@ export async function saveCommand(client: WASocket, botInfo: Bot, message: Messa
     // Salva o arquivo
     fs.writeFileSync(filePath, audioBuffer)
     
-    // Salva no banco (global)
-    audiosDb.save({
-        ownerJid: message.sender,
-        audioName: audioName,
-        filePath: filePath,
-        mimeType: message.quotedMessage.media?.mimetype || 'audio/ogg; codecs=opus',
-        seconds: message.quotedMessage.media?.seconds,
-        ptt: message.quotedMessage.media?.ptt || false
-    })
+    try {
+        // Salva no banco (global)
+        audiosDb.save({
+            ownerJid: message.sender,
+            audioName: audioName,
+            filePath: filePath,
+            mimeType,
+            seconds: message.quotedMessage.media?.seconds,
+            ptt: message.quotedMessage.media?.ptt || false
+        })
+    } catch (err) {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath)
+        }
+
+        throw err
+    }
 
     const replyText = buildText(utilityCommands.save.msgs.reply, audioName)
     await waUtil.replyText(client, message.chat_id, replyText, message.wa_message, {expiration: message.expiration})

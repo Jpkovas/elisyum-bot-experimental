@@ -16,6 +16,13 @@ else
     YTDLP_FILENAME="yt-dlp"
 fi
 LOCAL_YTDLP="${BIN_DIR}/${YTDLP_FILENAME}"
+YTDLP_VERSION="${YTDLP_VERSION:-2025.12.08}"
+if [ "${OS}" = "Windows_NT" ]; then
+    YTDLP_SHA256="${YTDLP_SHA256:-}"
+else
+    YTDLP_SHA256="${YTDLP_SHA256:-aed043cabf6b352dfd5438afff595e31532538d5af7c8f4f95ced1e6f1b35c2a}"
+fi
+YTDLP_DOWNLOAD_URL="https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${YTDLP_FILENAME}"
 
 echo "🚀 Elisyum Bot - Setup/Deploy Script"
 echo "======================================"
@@ -30,6 +37,48 @@ NC='\033[0m' # No Color
 # Função para verificar se um comando existe
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+calculate_sha256() {
+    if command_exists shasum; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    elif command_exists sha256sum; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        echo -e "${RED}✗${NC} Instale shasum ou sha256sum para verificar o yt-dlp."
+        return 1
+    fi
+}
+
+verify_ytdlp_hash() {
+    if [ -z "${YTDLP_SHA256}" ]; then
+        echo -e "${RED}✗${NC} Defina YTDLP_SHA256 para instalar yt-dlp nesta plataforma."
+        return 1
+    fi
+
+    local actual_hash
+    actual_hash="$(calculate_sha256 "$1")"
+
+    if [ "${actual_hash}" != "${YTDLP_SHA256}" ]; then
+        echo -e "${RED}✗${NC} Checksum do yt-dlp invalido."
+        echo "Esperado: ${YTDLP_SHA256}"
+        echo "Obtido:   ${actual_hash}"
+        return 1
+    fi
+}
+
+download_ytdlp_local() {
+    local tmp_path="${LOCAL_YTDLP}.tmp"
+
+    rm -f "${tmp_path}"
+    curl -fL "${YTDLP_DOWNLOAD_URL}" -o "${tmp_path}"
+    verify_ytdlp_hash "${tmp_path}"
+
+    if [ "${OS}" != "Windows_NT" ]; then
+        chmod +x "${tmp_path}"
+    fi
+
+    mv "${tmp_path}" "${LOCAL_YTDLP}"
 }
 
 # Verificar Node.js
@@ -47,7 +96,7 @@ if command_exists node; then
     fi
 else
     echo -e "${RED}✗${NC} Node.js não instalado!"
-    echo "Execute: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"
+    echo "Instale Node.js v20+ pelo gerenciador oficial da sua distribuição antes de continuar."
     exit 1
 fi
 
@@ -57,10 +106,9 @@ if command_exists bun; then
     BUN_VERSION=$(bun --version)
     echo -e "${GREEN}✓${NC} Bun instalado: v$BUN_VERSION"
 else
-    echo -e "${YELLOW}⚠${NC}  Bun não instalado. Instalando..."
-    curl -fsSL https://bun.sh/install | bash
-    export PATH="$HOME/.bun/bin:$PATH"
-    echo -e "${GREEN}✓${NC} Bun instalado!"
+    echo -e "${RED}✗${NC} Bun não instalado."
+    echo "Instale o Bun por um canal confiável e execute este script novamente."
+    exit 1
 fi
 
 # Verificar FFmpeg
@@ -79,8 +127,8 @@ echo "📹 Verificando yt-dlp..."
 YTDLP_INSTALLED=false
 
 if command_exists yt-dlp; then
-    YTDLP_VERSION=$(yt-dlp --version)
-    echo -e "${GREEN}✓${NC} yt-dlp instalado globalmente: $YTDLP_VERSION"
+    YTDLP_GLOBAL_VERSION=$(yt-dlp --version)
+    echo -e "${GREEN}✓${NC} yt-dlp instalado globalmente: $YTDLP_GLOBAL_VERSION"
     YTDLP_INSTALLED=true
 fi
 
@@ -91,27 +139,21 @@ if [ -f "${LOCAL_YTDLP}" ]; then
         chmod +x "${LOCAL_YTDLP}"
     fi
 
-    if "${LOCAL_YTDLP}" --version >/dev/null 2>&1; then
+    if "${LOCAL_YTDLP}" --version >/dev/null 2>&1 && verify_ytdlp_hash "${LOCAL_YTDLP}"; then
         YTDLP_LOCAL_VERSION=$("${LOCAL_YTDLP}" --version)
-        echo -e "${GREEN}✓${NC} yt-dlp local encontrado: $YTDLP_LOCAL_VERSION"
+        echo -e "${GREEN}✓${NC} yt-dlp local encontrado e verificado: $YTDLP_LOCAL_VERSION"
         YTDLP_INSTALLED=true
     else
-        echo -e "${YELLOW}⚠${NC}  yt-dlp local inválido. Reinstalando..."
-        curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${YTDLP_FILENAME}" -o "${LOCAL_YTDLP}"
-        if [ "${OS}" != "Windows_NT" ]; then
-            chmod +x "${LOCAL_YTDLP}"
-        fi
+        echo -e "${YELLOW}⚠${NC}  yt-dlp local inválido ou checksum divergente. Reinstalando..."
+        download_ytdlp_local
         YTDLP_LOCAL_VERSION=$("${LOCAL_YTDLP}" --version)
-        echo -e "${GREEN}✓${NC} yt-dlp local reinstalado: $YTDLP_LOCAL_VERSION"
+        echo -e "${GREEN}✓${NC} yt-dlp local reinstalado e verificado: $YTDLP_LOCAL_VERSION"
         YTDLP_INSTALLED=true
     fi
 else
     echo "📥 Baixando yt-dlp local..."
-    curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${YTDLP_FILENAME}" -o "${LOCAL_YTDLP}"
-    if [ "${OS}" != "Windows_NT" ]; then
-        chmod +x "${LOCAL_YTDLP}"
-    fi
-    echo -e "${GREEN}✓${NC} yt-dlp local instalado!"
+    download_ytdlp_local
+    echo -e "${GREEN}✓${NC} yt-dlp local instalado e verificado!"
     YTDLP_INSTALLED=true
 fi
 
@@ -123,7 +165,7 @@ fi
 echo ""
 echo "🔧 Instalando dependências..."
 rm -rf node_modules
-bun install
+bun install --frozen-lockfile
 
 echo ""
 echo "🧾 Gerando inventário do storage (antes do build)..."

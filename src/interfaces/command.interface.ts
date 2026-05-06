@@ -5,6 +5,7 @@ import { Group } from "./group.interface.js"
 import { CommandPermissions } from "../types/permission.types.js"
 
 export type CategoryCommand = "info" | "utility" | "group" | "admin"
+export type CommandSelectionCategory = CategoryCommand | "download" | "sticker" | "misc"
 type CommandFunction = (client: WASocket, botInfo: Bot, message: Message, group?: Group) => Promise<void>
 
 export type Commands = {
@@ -21,6 +22,4 @@ export type Commands = {
 export type CommandsList = {
     [category in CategoryCommand]: Commands
 }
-
-
 

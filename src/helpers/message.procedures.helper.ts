@@ -14,6 +14,28 @@ import { getBlockedContactsFromCache, setBlockedContactsCache } from "./blocked-
 const userController = new UserController()
 const botController = new BotController()
 const groupController = new GroupController()
+const aiHelpBuckets = new Map<string, { count: number, resetAt: number, limitedUntil: number }>()
+
+function getPositiveIntegerEnv(name: string, fallback: number) {
+    const rawValue = process.env[name]
+    const parsedValue = rawValue ? Number(rawValue) : fallback
+
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : fallback
+}
+
+function getAiHelpBudget(botInfo: Bot) {
+    return {
+        maxRequests: getPositiveIntegerEnv('AI_HELP_MAX_REQUESTS_PER_MINUTE', 3),
+        blockSeconds: getPositiveIntegerEnv('AI_HELP_BLOCK_SECONDS', botInfo.command_rate?.block_time || 60),
+    }
+}
+
+function hasValidOwnerBootstrapToken(message: Message){
+    const expectedToken = process.env.BOT_OWNER_BOOTSTRAP_TOKEN?.trim()
+    const receivedToken = message.args[0]?.trim()
+
+    return Boolean(expectedToken && receivedToken && receivedToken === expectedToken)
+}
 
 export async function isUserBlocked(client: WASocket, message: Message){
     const cachedContacts = getBlockedContactsFromCache()
@@ -32,6 +54,10 @@ export async function isOwnerRegister(client: WASocket, botInfo: Bot, message: M
     const admins = await userController.getUsers().then(users => users.filter(u => u.owner))
 
     if (!admins.length && message.command == `${botInfo.prefix}admin`){
+        if (!hasValidOwnerBootstrapToken(message)) {
+            return false
+        }
+
         await userController.registerOwner(message.sender, message.senderAlt)
         await waUtil.replyText(client, message.chat_id, buildText(botTexts.admin_registered), message.wa_message, {expiration: message.expiration})
         return true
@@ -155,6 +181,41 @@ export async function isUserLimitedByCommandRate(client: WASocket, botInfo: Bot,
     return false
 }
 
+export async function isUserLimitedByAiHelp(client: WASocket, botInfo: Bot, message: Message){
+    if (message.isBotOwner) {
+        return false
+    }
+
+    const currentTimestamp = Math.round(moment.now() / 1000)
+    const { maxRequests, blockSeconds } = getAiHelpBudget(botInfo)
+    const key = message.sender || message.chat_id
+    const bucket = aiHelpBuckets.get(key)
+
+    if (bucket?.limitedUntil && currentTimestamp < bucket.limitedUntil) {
+        const replyText = buildText(botTexts.command_rate_limited_message, Math.max(1, bucket.limitedUntil - currentTimestamp))
+        await waUtil.replyText(client, message.chat_id, replyText, message.wa_message, { expiration: message.expiration })
+        return true
+    }
+
+    const activeBucket = (!bucket || currentTimestamp >= bucket.resetAt)
+        ? { count: 0, resetAt: currentTimestamp + 60, limitedUntil: 0 }
+        : bucket
+
+    activeBucket.count += 1
+
+    if (activeBucket.count > maxRequests) {
+        activeBucket.limitedUntil = currentTimestamp + blockSeconds
+        aiHelpBuckets.set(key, activeBucket)
+
+        const replyText = buildText(botTexts.command_rate_limited_message, blockSeconds)
+        await waUtil.replyText(client, message.chat_id, replyText, message.wa_message, { expiration: message.expiration })
+        return true
+    }
+
+    aiHelpBuckets.set(key, activeBucket)
+    return false
+}
+
 export async function isCommandBlockedGlobally(client: WASocket, botInfo: Bot, message: Message ){
     const commandBlocked = botInfo.block_cmds.includes(waUtil.removePrefix(botInfo.prefix, message.command))
 
@@ -252,6 +313,14 @@ export async function isDetectedByAntiLink(client: WASocket, botInfo: Bot, group
     return false
 }
 
+export function getNextAntiFloodMessageCount(currentMessages: number, hasExpiredMessages: boolean) {
+    return hasExpiredMessages ? 1 : currentMessages + 1
+}
+
+export function shouldEnforceAntiFloodLimit(currentMessages: number, maxMessages: number, hasExpiredMessages: boolean) {
+    return !hasExpiredMessages && getNextAntiFloodMessageCount(currentMessages, hasExpiredMessages) >= maxMessages
+}
+
 export async function isDetectedByAntiFlood(client: WASocket, botInfo: Bot, group: Group, message: Message){
     const currentTimestamp = Math.round(moment.now()/1000)
     const { isGroupAdmin } = message
@@ -268,7 +337,7 @@ export async function isDetectedByAntiFlood(client: WASocket, botInfo: Bot, grou
         await groupController.incrementAntiFloodMessage(group.id, message.sender)
     }
 
-    if (!hasExpiredMessages && participant.antiflood.msgs >= group.antiflood.max_messages) {
+    if (shouldEnforceAntiFloodLimit(participant.antiflood.msgs, group.antiflood.max_messages, hasExpiredMessages)) {
         const replyText = buildText(botTexts.antiflood_ban_messages, waUtil.removeWhatsappSuffix(message.sender), botInfo.name)
         await waUtil.removeParticipant(client, message.chat_id, message.sender)
         await waUtil.sendTextWithMentions(client, message.chat_id, replyText, [message.sender], {expiration: message.expiration})
@@ -277,4 +346,3 @@ export async function isDetectedByAntiFlood(client: WASocket, botInfo: Bot, grou
         return false
     }
 }
-

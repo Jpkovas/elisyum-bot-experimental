@@ -2,7 +2,6 @@ import * as updaterUtil from "../utils/updater.util.js";
 import { colorText, getCurrentBotVersion } from "../utils/general.util.js";
 import botTexts from "../helpers/bot.texts.helper.js";
 import { BotController } from "../controllers/bot.controller.js";
-import fs from 'fs-extra'
 import databaseMigration from "./database.migrate.helper.js";
 
 export async function botUpdater(){
@@ -24,7 +23,6 @@ export async function botUpdater(){
             console.log(colorText(botTexts.no_update_available))
         } else {
             console.log(colorText(botTexts.update_available, '#e0e031'))
-            fs.removeSync('./dist')
             await updaterUtil.makeUpdate('./')
             botController.setDbMigrated(false)
             console.log(colorText(botTexts.bot_updated))

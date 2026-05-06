@@ -13,7 +13,6 @@
     "clean": "rimraf dist/",
     "copy-media": "copyfiles -u 2 src/media/* dist/media",
     "preflight:storage": "bun run scripts/storage-preflight.ts",
-    "prestart": "bun install",
     "dev": "bun run build && bun start.js",
     "migrate": "cross-env migrate=y bun run dev",
     "build": "bun run clean && bun run tsc && bun run copy-media",
@@ -65,7 +64,6 @@
     "@seald-io/nedb": "^4.1.1",
     "@tobyg74/tiktok-api-dl": "^1.3.2",
     "@victorsouzaleal/brasileirao": "^1.1.2",
-    "@victorsouzaleal/googlethis": "^1.8.1",
     "@vitalets/google-translate-api": "^9.2.1",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "adm-zip": "^0.5.16",
@@ -89,8 +87,6 @@
     "moment-timezone": "^0.5.47",
     "node-cache": "^5.1.2",
     "node-cron": "^4.2.1",
-    "node-gtts": "^2.0.2",
-    "node-upload-images": "^1.0.1",
     "node-webpmux": "^3.2.0",
     "pino": "7.11.0",
     "pretty-num": "^0.5.0",
@@ -105,6 +101,6 @@
     "link-preview-js": "^3.0.5"
   },
   "resolutions": {
-    "libsignal": "github:whiskeysockets/libsignal-node#e81ecfc32eb74951d789ab37f7e341ab66d5fff1"
+    "libsignal": "github:whiskeysockets/libsignal-node#1c30d7d"
   }
 }

@@ -13,7 +13,7 @@ import * as waUtil from "../utils/whatsapp.util.js";
 import botTexts from "../helpers/bot.texts.helper.js";
 import adminCommands from "./admin.list.commands.js";
 import { commandExist, getCommandsByCategory } from "../utils/commands.util.js";
-import { CategoryCommand } from "../interfaces/command.interface.js";
+import { CommandSelectionCategory } from "../interfaces/command.interface.js";
 import { SchedulerService } from "../services/scheduler.service.js";
 
 export async function adminCommand(client: WASocket, botInfo: Bot, message: Message, group: Group){
@@ -71,9 +71,9 @@ export async function sairgruposCommand(client: WASocket, botInfo: Bot, message:
     const currentGroups = await groupController.getAllGroups()
     const replyText = buildText(adminCommands.sairgrupos.msgs.reply, currentGroups.length)
 
-    currentGroups.forEach(async (group) =>{
+    for (const group of currentGroups) {
         await waUtil.leaveGroup(client, group.id)
-    })
+    }
 
     if (message.isGroupMsg) {
         await waUtil.sendText(client, message.sender, replyText)
@@ -174,7 +174,7 @@ export async function bcmdglobalCommand(client: WASocket, botInfo: Bot, message:
     } 
     
     if (categories.includes(commands[0])) {
-        commands = getCommandsByCategory(prefix, commands[0] as CategoryCommand)
+        commands = getCommandsByCategory(prefix, commands[0] as CommandSelectionCategory)
     }
     
     for(let command of commands){
@@ -202,7 +202,7 @@ export async function dcmdglobalCommand(client: WASocket, botInfo: Bot, message:
     let commands = message.args
     let validCommands : string[] = []
     let unblockResponse = adminCommands.dcmdglobal.msgs.reply_title
-    let categories : CategoryCommand[] | string[] = ['all', 'sticker', 'utility', 'download', 'misc']
+    let categories : CommandSelectionCategory[] | string[] = ['all', 'sticker', 'utility', 'download', 'misc']
 
     if (!message.args.length) {
         throw new Error(messageErrorCommandUsage(botInfo.prefix, message))
@@ -220,7 +220,7 @@ export async function dcmdglobalCommand(client: WASocket, botInfo: Bot, message:
         if (commands[0] === 'all') {
             commands = botInfo.block_cmds.map(command => prefix+command)
         } else {
-            commands = getCommandsByCategory(prefix, commands[0] as CategoryCommand)
+            commands = getCommandsByCategory(prefix, commands[0] as CommandSelectionCategory)
         }
     }
 
@@ -256,6 +256,7 @@ export async function entrargrupoCommand(client: WASocket, botInfo: Bot, message
 
     if(!groupResponse) {
         await waUtil.replyText(client, message.chat_id, adminCommands.entrargrupo.msgs.reply_pending, message.wa_message, {expiration: message.expiration})
+        return
     }
 
     await waUtil.replyText(client, message.chat_id, adminCommands.entrargrupo.msgs.reply, message.wa_message, {expiration: message.expiration})
@@ -272,7 +273,7 @@ export async function bcgruposCommand(client: WASocket, botInfo: Bot, message: M
     const waitReply = buildText(adminCommands.bcgrupos.msgs.wait, currentGroups.length)
     await waUtil.replyText(client, message.chat_id, waitReply, message.wa_message, {expiration: message.expiration})
 
-    currentGroups.forEach(async (group) => {
+    for (const group of currentGroups) {
         if (!group.restricted){
             await new Promise<void>((resolve)=>{
                 setTimeout(async ()=>{
@@ -284,7 +285,7 @@ export async function bcgruposCommand(client: WASocket, botInfo: Bot, message: M
                 }, 1000)
             })
         }
-    })
+    }
 
     await waUtil.replyText(client, message.chat_id, adminCommands.bcgrupos.msgs.reply, message.wa_message, {expiration: message.expiration})
 }
@@ -480,5 +481,3 @@ export async function testkasinoCommand(client: WASocket, botInfo: Bot, message:
         await waUtil.replyText(client, message.chat_id, adminCommands.testkasino.msgs.error, message.wa_message, {expiration: message.expiration})
     }
 }
-
-

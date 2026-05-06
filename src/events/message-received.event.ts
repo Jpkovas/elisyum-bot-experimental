@@ -5,7 +5,7 @@ import NodeCache from 'node-cache'
 import { UserController } from '../controllers/user.controller.js'
 import { handleGroupMessage, handlePrivateMessage } from '../helpers/message.handler.helper.js'
 import { GroupController } from '../controllers/group.controller.js'
-import { storeMessageOnCache, formatWAMessage } from '../utils/whatsapp.util.js'
+import { storeMessageOnCache, formatWAMessage, storeViewOnceMessage } from '../utils/whatsapp.util.js'
 import { commandInvoker } from '../helpers/command.invoker.helper.js'
 
 export async function messageReceived (client: WASocket, messages : {messages: WAMessage[], requestId?: string, type: MessageUpsertType}, botInfo : Bot, messageCache: NodeCache, viewOnceCache?: NodeCache){
@@ -28,7 +28,7 @@ export async function messageReceived (client: WASocket, messages : {messages: W
                 const messageType = getContentType(waMessage.message)
                 if (messageType === 'viewOnceMessage' || messageType === 'viewOnceMessageV2' || messageType === 'viewOnceMessageV2Extension') {
                     console.log(`[VIEW-ONCE] Salvando mensagem de visualização única: ${waMessage.key.id}`)
-                    viewOnceCache.set(waMessage.key.id, waMessage)
+                    storeViewOnceMessage(waMessage, viewOnceCache)
                 }
             }
 

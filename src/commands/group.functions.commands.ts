@@ -8,7 +8,7 @@ import { UserController } from "../controllers/user.controller.js";
 import { GroupController } from "../controllers/group.controller.js";
 import groupCommands from "./group.list.commands.js";
 import botTexts from "../helpers/bot.texts.helper.js";
-import { CategoryCommand } from "../interfaces/command.interface.js";
+import { CommandSelectionCategory } from "../interfaces/command.interface.js";
 import { commandExist, getCommandsByCategory } from "../utils/commands.util.js";
 
 export async function grupoCommand(client: WASocket, botInfo: Bot, message: Message, group: Group){
@@ -326,21 +326,36 @@ export async function addCommand(client: WASocket, botInfo: Bot, message: Messag
         throw new Error(messageErrorCommandUsage(botInfo.prefix, message))
     }
     
-    let userId = waUtil.addWhatsappSuffix(message.text_command.trim())
+    const userIds = message.text_command
+        .split(',')
+        .map(userId => userId.trim())
+        .filter(Boolean)
 
-    if (!Number(waUtil.removeWhatsappSuffix(userId))) {
+    if (!userIds.length) {
         throw new Error(groupCommands.add.msgs.error_input)
     }
 
-    let addResponse = await waUtil.addParticipant(client, group.id, userId).catch((err) => {
-        throw new Error(buildText(groupCommands.add.msgs.error_invalid_number, waUtil.removeWhatsappSuffix(userId)))
-    })
+    const addedUsers: string[] = []
 
-    if (addResponse.status != "200") {
-        throw new Error(buildText(groupCommands.add.msgs.error_add, waUtil.removeWhatsappSuffix(userId)))
+    for (const rawUserId of userIds) {
+        const userId = waUtil.addWhatsappSuffix(rawUserId)
+
+        if (!Number(waUtil.removeWhatsappSuffix(userId))) {
+            throw new Error(groupCommands.add.msgs.error_input)
+        }
+
+        let addResponse = await waUtil.addParticipant(client, group.id, userId).catch(() => {
+            throw new Error(buildText(groupCommands.add.msgs.error_invalid_number, waUtil.removeWhatsappSuffix(userId)))
+        })
+
+        if (addResponse.status != "200") {
+            throw new Error(buildText(groupCommands.add.msgs.error_add, waUtil.removeWhatsappSuffix(userId)))
+        }
+
+        addedUsers.push(waUtil.removeWhatsappSuffix(userId))
     }
 
-    const replyText = buildText(groupCommands.add.msgs.reply, waUtil.removeWhatsappSuffix(userId))
+    const replyText = buildText(groupCommands.add.msgs.reply, addedUsers.join(', '))
     await waUtil.replyText(client, group.id, replyText, message.wa_message, {expiration: message.expiration})
 }
 
@@ -576,7 +591,7 @@ export async function rmrespCommand(client: WASocket, botInfo: Bot, message: Mes
     const words = message.args.map(word => removeFormatting(word).toLowerCase().trim())
     let replyText = groupCommands.rmresp.msgs.reply_title
 
-    words.forEach(async (word) => {
+    for (const word of words) {
         const wordRegistered = group.auto_reply.config.find(config => config.word == word)
 
         if (wordRegistered) {
@@ -585,7 +600,7 @@ export async function rmrespCommand(client: WASocket, botInfo: Bot, message: Mes
         } else {
             replyText +=  buildText(groupCommands.rmresp.msgs.reply_item_error, word)
         }
-    })
+    }
 
     await waUtil.replyText(client, group.id, replyText, message.wa_message, {expiration: message.expiration})
 }
@@ -607,7 +622,7 @@ export async function addexlinkCommand(client: WASocket, botInfo: Bot, message: 
 
     let replyText = groupCommands.addexlink.msgs.reply_title
 
-    message.args.forEach(async (exception) => {
+    for (let exception of message.args) {
         exception = exception.trim()
 
         if (!group.antilink.exceptions.includes(exception)) {
@@ -616,7 +631,7 @@ export async function addexlinkCommand(client: WASocket, botInfo: Bot, message: 
         } else {
             replyText += buildText(groupCommands.addexlink.msgs.reply_item_already_added, exception)
         }
-    })
+    }
     
     await waUtil.replyText(client, group.id, replyText, message.wa_message, {expiration: message.expiration})
 }
@@ -630,7 +645,7 @@ export async function rmexlinkCommand(client: WASocket, botInfo: Bot, message: M
     
     let replyText = groupCommands.rmexlink.msgs.reply_title
 
-    message.args.forEach(async (exception) => {
+    for (let exception of message.args) {
         exception = exception.trim()
 
         if (group.antilink.exceptions.includes(exception)) {
@@ -639,7 +654,7 @@ export async function rmexlinkCommand(client: WASocket, botInfo: Bot, message: M
         } else {
             replyText += buildText(groupCommands.rmexlink.msgs.reply_item_not_exist, exception)
         }
-    })
+    }
     
     await waUtil.replyText(client, group.id, replyText, message.wa_message, {expiration: message.expiration})
 }
@@ -682,7 +697,7 @@ export async function addexfakeCommand(client: WASocket, botInfo: Bot, message: 
     
     let replyText = groupCommands.addexfake.msgs.reply_title
 
-    exceptions.forEach(async (exception) => {
+    for (let exception of exceptions) {
         exception = exception.replace(/\W+/g, "")
 
         if (exception.length <= 3) {
@@ -700,7 +715,7 @@ export async function addexfakeCommand(client: WASocket, botInfo: Bot, message: 
                 await groupController.setFakeNumberException(group.id, exception, 'add')
             }
         }
-    })
+    }
 
     await waUtil.replyText(client, group.id, replyText, message.wa_message, {expiration: message.expiration})
 }
@@ -718,7 +733,7 @@ export async function rmexfakeCommand(client: WASocket, botInfo: Bot, message: M
     
     let replyText = groupCommands.rmexfake.msgs.reply_title
 
-    exceptions.forEach(async (exception) => {
+    for (let exception of exceptions) {
         exception = exception.replace(/\W+/g, "")
 
         if (exception == '55') {
@@ -738,7 +753,7 @@ export async function rmexfakeCommand(client: WASocket, botInfo: Bot, message: M
                 await groupController.setFakeNumberException(group.id, exception, 'remove')
             }
         }
-    })
+    }
 
     await waUtil.replyText(client, group.id, replyText, message.wa_message, {expiration: message.expiration})
 }
@@ -894,7 +909,7 @@ export async function bcmdCommand(client: WASocket, botInfo: Bot, message: Messa
     }
     
     if (categories.includes(commands[0])) {
-        commands = getCommandsByCategory(prefix, commands[0] as CategoryCommand)
+        commands = getCommandsByCategory(prefix, commands[0] as CommandSelectionCategory)
     }
 
     for (let command of commands) {
@@ -941,7 +956,7 @@ export async function dcmdCommand(client: WASocket, botInfo: Bot, message: Messa
         if (commands[0] === 'all') {
             commands = group.block_cmds.map(command => prefix + command)
         } else {
-            commands = getCommandsByCategory(prefix, commands[0] as CategoryCommand)
+            commands = getCommandsByCategory(prefix, commands[0] as CommandSelectionCategory)
         }
     }
 
@@ -957,6 +972,4 @@ export async function dcmdCommand(client: WASocket, botInfo: Bot, message: Messa
     await groupController.setBlockedCommands(group.id, prefix, validCommands, 'remove')
     await waUtil.replyText(client, message.chat_id, unblockResponse, message.wa_message, { expiration: message.expiration })
 }
-
-
 

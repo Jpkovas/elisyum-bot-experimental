@@ -39,7 +39,6 @@ declare module 'yt-search' {
 }
 
 // other libraries used without types
-declare module 'node-upload-images' { const m:any; export default m }
 declare module 'node-webpmux' { const m:any; export default m }
 
 type Base64URLString = string

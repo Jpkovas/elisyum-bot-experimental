@@ -1,4 +1,5 @@
 import { colorText, showConsoleError } from '../utils/general.util.js'
+import { hashForLog } from '../utils/privacy.util.js'
 
 export type NewsletterUpdate = {
     id?: string
@@ -16,9 +17,9 @@ export async function logNewslettersUpdate(updates: NewsletterUpdate[]) {
 
             console.log(
                 colorText('[NEWSLETTER-META]', '#9c88ff'),
-                colorText(id, '#44bd32'),
+                colorText(hashForLog(id) || 'unknown', '#44bd32'),
                 colorText(op, '#e84118'),
-                update.data ? colorText(JSON.stringify(update.data), '#40739e') : ''
+                update.data ? colorText('metadata_present=true', '#40739e') : ''
             )
         }
     } catch (err: any) {

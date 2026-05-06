@@ -55,10 +55,9 @@ const brokenAudioRefs = savedAudios.filter(audio => !fs.existsSync(audio.file_pa
 
 const report = {
     generatedAt: new Date().toISOString(),
-    projectRoot,
     storage: {
         exists: fs.existsSync(storageDir),
-        files: listFilesSafe(storageDir),
+        fileCount: listFilesSafe(storageDir).length,
         sessionDb: {
             exists: fs.existsSync(sessionDbPath),
             stats: fileStatsSafe(sessionDbPath)
@@ -70,18 +69,16 @@ const report = {
     },
     audios: {
         filesOnDisk: audioFiles.length,
-        fileSamples: audioFiles.slice(0, 10),
         savedAudiosRows: savedAudios.length,
         brokenRefs: brokenAudioRefs.length,
         brokenRefSamples: brokenAudioRefs.slice(0, 10).map(audio => ({
             id: audio.id,
-            audioName: audio.audio_name,
-            filePath: audio.file_path
+            mimeType: audio.mime_type,
+            seconds: audio.seconds,
+            ptt: Boolean(audio.ptt)
         })),
         rowSamples: savedAudios.slice(0, 10).map(audio => ({
             id: audio.id,
-            audioName: audio.audio_name,
-            filePath: audio.file_path,
             mimeType: audio.mime_type,
             seconds: audio.seconds,
             ptt: Boolean(audio.ptt)

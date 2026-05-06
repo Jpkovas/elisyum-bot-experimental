@@ -1,6 +1,6 @@
 
 import { Bot } from "../interfaces/bot.interface.js"
-import {CategoryCommand, Commands } from "../interfaces/command.interface.js"
+import {CategoryCommand, CommandSelectionCategory, Commands } from "../interfaces/command.interface.js"
 import infoCommands from "../commands/info.list.commands.js"
 import utilityCommands from "../commands/utility.list.commands.js"
 import groupCommands from "../commands/group.list.commands.js"
@@ -11,8 +11,13 @@ import { buildText } from "./general.util.js"
 import { resolveCommandAlias } from "./command.aliases.util.js"
 
 const COMMAND_CATEGORIES = ['info', 'utility', 'group', 'admin']
+const UTILITY_SUBCATEGORIES: Record<string, string[]> = {
+    download: ['d', 'play', 'mp3', 'img'],
+    sticker: ['s', 'simg'],
+    misc: ['vtnc'],
+}
 
-export function commandExist(prefix: string, command: string, category? : CategoryCommand){
+export function commandExist(prefix: string, command: string, category? : CommandSelectionCategory){
     if (!command.startsWith(prefix)) {
         return false
     }
@@ -38,16 +43,22 @@ export function getCommands(prefix: string){
     return commands
 }
 
-export function getCommandsByCategory(prefix: string, category: CategoryCommand){
+export function getCommandsByCategory(prefix: string, category: CommandSelectionCategory){
     switch(category){
         case 'info':
             return Object.keys(infoCommands).map(command => prefix+command)
         case 'utility':
             return Object.keys(utilityCommands).map(command => prefix+command)
+        case 'download':
+        case 'sticker':
+        case 'misc':
+            return UTILITY_SUBCATEGORIES[category].map(command => prefix + command)
         case 'group':
             return Object.keys(groupCommands).map(command => prefix+command)
         case 'admin':
             return Object.keys(adminCommands).map(command => prefix+command)
+        default:
+            return []
     }
 }
 

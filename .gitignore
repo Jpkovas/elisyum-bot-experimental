@@ -16,6 +16,7 @@ storage/*.db
 storage/*.db-shm
 storage/*.db-wal
 storage/bot.json
+storage-preflight*.json
 # Codigo JS
 dist
 #Sessao
@@ -23,5 +24,4 @@ session
 # Bun
 node_modules.bun
 bun.lockb
-bun.lock
 codex-scripts/

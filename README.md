@@ -9,10 +9,12 @@
 [![Documentação](https://img.shields.io/badge/Docs-Completa-blue?style=for-the-badge)](docs/guides/INSTALLATION.md)
 [![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
 
-### 🚀 Instale agora com um único comando!
+### 🚀 Instale com script local revisável
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main/scripts/setup/install.sh | bash
+git clone https://github.com/paulocesarcustodio/elisyum-bot.git
+cd elisyum-bot
+./scripts/setup/install.sh
 ```
 
 </div>
@@ -31,10 +33,12 @@ curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main
 
 ## 💿 Instalação
 
-### 🚀 Instalação com Um Comando (Linux/macOS)
+### 🚀 Instalação com script local revisável (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/paulocesarcustodio/elisyum-bot/main/scripts/setup/install.sh | bash
+git clone https://github.com/paulocesarcustodio/elisyum-bot.git
+cd elisyum-bot
+./scripts/setup/install.sh
 ```
 
 **Após a instalação:**
@@ -61,9 +65,9 @@ bun start          # Inicia com banner bonito
 bun run session:clear # Limpa a sessão sem iniciar
 ```
 
-O script instala automaticamente:
-- ✅ Clona o repositório
-- ✅ Bun runtime
+O script verifica e prepara:
+- ✅ Usa o script versionado dentro do repositório clonado
+- ✅ Bun runtime já instalado
 - ✅ FFmpeg
 - ✅ Dependências do Canvas (Linux)
 - ✅ Todas as dependências npm
@@ -79,7 +83,7 @@ O script instala automaticamente:
 Antes da instalação você tem que instalar os programas abaixo, no Windows é só instalar pelo link indicado e no Linux você tem que pesquisar qual é o comando para instalar na sua distribuição.
 - Git 64-bit - [DOWNLOAD](https://git-scm.com/downloads/win)<br>
 - Bun (>= 1.0) - [DOWNLOAD](https://bun.sh/)<br>
-  - **Windows/Linux/macOS**: `curl -fsSL https://bun.sh/install | bash`<br>
+  - **Windows/Linux/macOS**: use o método oficial da plataforma e revise o instalador quando aplicável<br>
 - FFmpeg - [DOWNLOAD](https://ffmpeg.org/download.html) (necessário para conversão de áudio/vídeo)<br>
   - **Windows**: Baixe o build e adicione ao PATH do sistema
   - **Linux/Ubuntu/Debian**: `sudo apt install ffmpeg`
@@ -94,7 +98,7 @@ Faça o download do **.zip** da última versão lançada [AQUI](https://github.c
 
 <br>
 
-> ℹ️ Este projeto utiliza **Bun** como runtime e gerenciador de pacotes oficial. Execute `bun install` sempre que atualizar o repositório.
+> ℹ️ Este projeto utiliza **Bun** como runtime e gerenciador de pacotes oficial. Execute `bun install --frozen-lockfile` sempre que atualizar o repositório para usar exatamente o lockfile testado.
 
 <br>
 
@@ -122,7 +126,11 @@ Faça a instalação do .apk mais atual do Termux: [AQUI](https://github.com/ter
 
 Abra o **Termux** comece usando este comando para fazer o download e instalação do bot, isso pode demorar algum tempo até instalar tudo.
 ```bash
-pkg install wget -y && wget -O - tinyurl.com/lbot-termux | bash && cd ~/LBOT && bun start
+pkg install wget -y
+wget -O install-termux.sh tinyurl.com/lbot-termux
+less install-termux.sh
+bash install-termux.sh
+cd ~/LBOT && bun start
 ```
 <br>
 
@@ -159,7 +167,7 @@ Seu bot já deve estar iniciando normalmente após o passo anterior, use os coma
 <br>
 
 **!menu** - Dá acesso ao **menu principal**.<br>
-**!admin** - Dá acesso ao **menu de administrador**.
+**!admin** - Dá acesso ao **menu de administrador** depois que o dono já estiver configurado.
 
 Para downloads, você também pode simplesmente enviar um link suportado no chat que o bot faz o download automaticamente.
 
@@ -172,7 +180,7 @@ Todos os comandos tem um guia ao digitar: **!comando** guia
 ## ⚙️ Administração do bot/grupo
 
 Como ver os comandos de administração geral do **BOT**? <br>
-Envie **!admin** para o WhatsApp do bot e seu número será cadastrado como dono, após ser cadastrado você pode usar o **!admin** para ter acesso ao **menu do administrador**
+Na primeira configuração, defina `BOT_OWNER_BOOTSTRAP_TOKEN` no `.env` e envie **!admin seu-token** para cadastrar o dono. Depois disso, use **!admin** normalmente para acessar o **menu do administrador**.
 
 <br>
 
@@ -218,7 +226,7 @@ Diversos para administrar o bot e ter controle sobre ele.
 - **`link-preview-js`** continua opcional, mas documentado. Ele permite que `getUrlInfo` gere metadados e miniaturas de links quando o texto enviado contém URLs.【F:node_modules/@whiskeysockets/baileys/README.md†L600-L611】【F:node_modules/@whiskeysockets/baileys/lib/Utils/link-preview.js†L17-L84】 Em ambientes sem acesso externo, as prévias simplesmente não são geradas; mantenha a dependência instalada para fluxos que dependem disso.
 - **`@ffmpeg-installer/ffmpeg`** permanece como fallback interno quando o binário do sistema não está disponível. Ainda assim, recomendamos instalar o `ffmpeg` do sistema operacional para aproveitar aceleração por hardware quando possível.【F:node_modules/@whiskeysockets/baileys/README.md†L730-L732】 Em caso de erro, o Baileys continua registrando logs e tenta prosseguir com o envio.
 
-> ℹ️ **Política adotada:** essas bibliotecas ficam em `optionalDependencies`. O Bun as instala automaticamente quando o ambiente suporta os binários pré-compilados (como o `sharp`). Caso uma delas falhe na instalação, o `bun install` continuará, mas o recurso correspondente ficará indisponível até que a dependência seja instalada manualmente.
+> ℹ️ **Política adotada:** essas bibliotecas ficam em `optionalDependencies`. O Bun as instala automaticamente quando o ambiente suporta os binários pré-compilados (como o `sharp`). Caso uma delas falhe na instalação, o `bun install --frozen-lockfile` continuará, mas o recurso correspondente ficará indisponível até que a dependência seja instalada manualmente.
 
 ### 📣 Monitoramento de canais/newsletters
 
@@ -241,8 +249,9 @@ O projeto inclui um servidor webhook (`webhook-deploy.js`) para automatizar depl
 1. Configure as variáveis de ambiente:
    ```bash
    WEBHOOK_PORT=3001          # Porta do servidor webhook
-   WEBHOOK_SECRET=your-secret # Secret do webhook do GitHub
+   WEBHOOK_SECRET=your-secret # Secret obrigatório do webhook do GitHub
    DEPLOY_PATH=/path/to/bot   # Caminho do projeto no servidor
+   WEBHOOK_MAX_BODY_BYTES=1048576 # Limite do payload recebido
    ```
 
 2. Configure o webhook no GitHub:
