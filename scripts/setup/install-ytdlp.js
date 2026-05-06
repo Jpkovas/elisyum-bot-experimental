@@ -16,7 +16,10 @@ const ytDlpPath = join(binDir, fileName)
 const tmpPath = `${ytDlpPath}.tmp`
 
 const YTDLP_VERSION = process.env.YTDLP_VERSION || '2025.12.08'
-const YTDLP_SHA256 = process.env.YTDLP_SHA256 || (isWindows ? '' : 'aed043cabf6b352dfd5438afff595e31532538d5af7c8f4f95ced1e6f1b35c2a')
+const DEFAULT_YTDLP_SHA256 = isWindows
+    ? '86c3280caa696b567c917ac138bbe0d17e45dc2b329f67562302ee4c3973a06f'
+    : 'aed043cabf6b352dfd5438afff595e31532538d5af7c8f4f95ced1e6f1b35c2a'
+const YTDLP_SHA256 = process.env.YTDLP_SHA256 || DEFAULT_YTDLP_SHA256
 const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${fileName}`
 
 function sha256File(filePath) {

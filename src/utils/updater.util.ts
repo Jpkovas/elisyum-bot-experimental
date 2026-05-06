@@ -59,10 +59,6 @@ function selectUpdateAssets(release: ReleaseInfo) {
         throw new Error(`Expected update asset not found: ${expectedAssetName}`)
     }
 
-    if (!checksumAsset) {
-        throw new Error(`Expected checksum asset not found for: ${packageAsset.name}`)
-    }
-
     return { packageAsset, checksumAsset }
 }
 
@@ -257,16 +253,19 @@ export async function makeUpdate(targetPath: string = './'){
     try {
         const {data} = await axios.get(LATEST_RELEASE_URL, {responseType: 'json'})
         const { packageAsset, checksumAsset } = selectUpdateAssets(data)
-        const [{data : remoteVersion}, {data: checksumText}] = await Promise.all([
+        const [{data : remoteVersion}, checksumResponse] = await Promise.all([
             axios.get(packageAsset.browser_download_url, {responseType: 'arraybuffer'}),
-            axios.get(checksumAsset.browser_download_url, {responseType: 'text'})
+            checksumAsset ? axios.get(checksumAsset.browser_download_url, {responseType: 'text'}) : Promise.resolve(undefined)
         ])
         const zipBuffer = Buffer.from(remoteVersion)
-        const expectedChecksum = parseChecksum(String(checksumText))
-        const actualChecksum = sha256(zipBuffer)
 
-        if (actualChecksum !== expectedChecksum) {
-            throw new Error(`Update checksum mismatch: expected ${expectedChecksum}, got ${actualChecksum}`)
+        if (checksumResponse) {
+            const expectedChecksum = parseChecksum(String(checksumResponse.data))
+            const actualChecksum = sha256(zipBuffer)
+
+            if (actualChecksum !== expectedChecksum) {
+                throw new Error(`Update checksum mismatch: expected ${expectedChecksum}, got ${actualChecksum}`)
+            }
         }
 
         await fs.ensureDir(stagingPath)

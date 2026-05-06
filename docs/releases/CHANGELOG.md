@@ -21,6 +21,10 @@ Colocarei neste arquivos as mudanças significativas em cada versão começando 
 
 ## Unreleased
 
+### 🔧 Correções de update e setup - revisão PR 45
+- Atualizador agora mantém suporte a releases legadas com apenas um `.zip`, validando checksum quando o sidecar `.sha256` estiver disponível.
+- Instaladores locais do `yt-dlp` passaram a ter checksum padrão também para Windows.
+
 ### 🔧 Correções de comandos e persistência - auditoria batch 5
 - Cache do `!ask` agora isola respostas por tipo de usuário.
 - Atualizações parciais de grupo preservam valores válidos como `false`, `0` e múltiplos campos no mesmo evento.
@@ -507,5 +511,4 @@ Ao iniciar o bot após a atualização:
 - Comando **!bantodos** foi removido.
 - Comando **ibanir** foi removido.
 - Comando **!infobot** foi removido, o comando **!info** vai servir para a função dele.
-
 

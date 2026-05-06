@@ -5,6 +5,7 @@ test("yt-dlp installer pins a version and verifies SHA-256 before chmod", async 
 
     expect(source).toContain("YTDLP_VERSION")
     expect(source).toContain("YTDLP_SHA256")
+    expect(source).toContain("86c3280caa696b567c917ac138bbe0d17e45dc2b329f67562302ee4c3973a06f")
     expect(source).toContain("createHash")
     expect(source).not.toContain("/releases/latest/download/")
     expect(source).not.toContain("execSync(`curl")
@@ -15,6 +16,7 @@ test("deploy setup verifies the local yt-dlp binary hash after download", async 
 
     expect(source).toContain("YTDLP_VERSION")
     expect(source).toContain("YTDLP_SHA256")
+    expect(source).toContain("YTDLP_WINDOWS_SHA256")
     expect(source).toContain("shasum -a 256")
     expect(source).not.toContain("/releases/latest/download/")
 })

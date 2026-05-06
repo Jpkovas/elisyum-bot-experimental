@@ -71,21 +71,26 @@ function sha256(buffer: Buffer) {
     return crypto.createHash("sha256").update(buffer).digest("hex")
 }
 
-function mockLatestRelease(zipBuffer: Buffer, checksum: string, assetName = "LBOT-v3.5.1.zip") {
+function mockLatestRelease(zipBuffer: Buffer, checksum: string | undefined, assetName = "LBOT-v3.5.1.zip") {
     axiosGetImpl = async (url: string) => {
         if (url.includes("/releases/latest")) {
+            const assets = [
+                { name: assetName, browser_download_url: "https://example.test/release.zip" },
+            ]
+
+            if (checksum) {
+                assets.push({ name: `${assetName}.sha256`, browser_download_url: "https://example.test/release.zip.sha256" })
+            }
+
             return {
                 data: {
                     tag_name: "3.5.1",
-                    assets: [
-                        { name: assetName, browser_download_url: "https://example.test/release.zip" },
-                        { name: `${assetName}.sha256`, browser_download_url: "https://example.test/release.zip.sha256" },
-                    ],
+                    assets,
                 },
             }
         }
 
-        if (url.endsWith(".sha256")) {
+        if (checksum && url.endsWith(".sha256")) {
             return { data: `${checksum}  ${assetName}\n` }
         }
 
@@ -145,6 +150,22 @@ test("makeUpdate verifies checksum, extracts to staging, and then replaces dist"
         await makeUpdate(appDir)
         expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("new")
         expect(readFileSync(path.join(appDir, "package.json"), "utf8")).toBe("{\"version\":\"3.5.1\"}")
+    } finally {
+        rmSync(appDir, { recursive: true, force: true })
+    }
+})
+
+test("makeUpdate accepts legacy releases with only one zip asset", async () => {
+    const appDir = mkdtempSync(path.join(tmpdir(), "elisyum-update-"))
+    const distDir = path.join(appDir, "dist")
+    const zipBuffer = makeZip({ "dist/app.js": "new" })
+    mkdirSync(distDir, { recursive: true })
+    writeFileSync(path.join(distDir, "app.js"), "old")
+    mockLatestRelease(zipBuffer, undefined)
+
+    try {
+        await makeUpdate(appDir)
+        expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("new")
     } finally {
         rmSync(appDir, { recursive: true, force: true })
     }
