@@ -31,6 +31,33 @@ const stickerMsgs = {
     }
 }
 
+const MAX_STICKER_MEDIA_BYTES = 10 * 1024 * 1024
+const MAX_STICKER_VIDEO_SECONDS = 9
+
+function normalizeFileLength(fileLength?: number | Long | null) {
+    if (typeof fileLength === 'number') {
+        return fileLength
+    }
+
+    if (fileLength && typeof (fileLength as { toNumber?: () => number }).toNumber === 'function') {
+        return (fileLength as { toNumber: () => number }).toNumber()
+    }
+
+    return undefined
+}
+
+function validateStickerMedia(type: string, seconds?: number, fileLength?: number | Long | null) {
+    const normalizedFileLength = normalizeFileLength(fileLength)
+
+    if (!normalizedFileLength || normalizedFileLength <= 0 || normalizedFileLength > MAX_STICKER_MEDIA_BYTES) {
+        throw new Error(stickerMsgs.s.error_limit)
+    }
+
+    if (type === 'videoMessage' && (!seconds || seconds > MAX_STICKER_VIDEO_SECONDS)) {
+        throw new Error(stickerMsgs.s.error_limit)
+    }
+}
+
 function getGroupParticipantName(participant: GroupMetadata['participants'][number]) {
     const participantData = participant as GroupMetadata['participants'][number] & {
         notify?: string
@@ -94,7 +121,8 @@ export async function sCommand(client: WASocket, botInfo: Bot, message: Message,
     let messageData = {
         type : (message.isQuoted) ? message.quotedMessage?.type : message.type,
         message: (message.isQuoted) ? message.quotedMessage?.wa_message  : message.wa_message,
-        seconds: (message.isQuoted) ? message.quotedMessage?.media?.seconds : message.media?.seconds
+        seconds: (message.isQuoted) ? message.quotedMessage?.media?.seconds : message.media?.seconds,
+        fileLength: (message.isQuoted) ? message.quotedMessage?.media?.file_length : message.media?.file_length
     }
 
     if (!messageData.type || !messageData.message) {
@@ -250,9 +278,9 @@ export async function sCommand(client: WASocket, botInfo: Bot, message: Message,
     // Comportamento original para imagens/vídeos
     if (messageData.type != "imageMessage" && messageData.type != "videoMessage") {
         throw new Error(messageErrorCommandUsage(botInfo.prefix, message))
-    } else if (messageData.type == "videoMessage" && messageData.seconds && messageData.seconds  > 9) {
-        throw new Error(stickerMsgs.s.error_limit)
     }
+
+    validateStickerMedia(messageData.type, messageData.seconds, messageData.fileLength)
     
     const mediaBuffer = await waUtil.downloadMessageAsBuffer(client, messageData.message)
     const authorText = buildText(stickerMsgs.s.author_text, message.pushname)
@@ -277,4 +305,3 @@ export async function simgCommand(client: WASocket, botInfo: Bot, message: Messa
     const imageBuffer = await stickerUtil.stickerToImage(stickerBuffer)
     await waUtil.replyFileFromBuffer(client, message.chat_id, 'imageMessage', imageBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'image/png'})
 }
-

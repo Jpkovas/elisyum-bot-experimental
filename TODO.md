@@ -6,3 +6,5 @@
 - Implementar expiração automática para membros silenciados após um período configurável, revertendo o mute sem intervenção manual.
 - Monitorar o impacto das chamadas extras do `ensureParticipantRecord` nos fluxos de atividade/antiflood e avaliar se vale consolidar a criação com os updates para reduzir round-trips em grupos grandes.
 - Converter os roteiros de `scripts/manual-tests` em testes automatizados sempre que possível para cobrir regressões de mídia no CI.
+
+- Próximo passo: extrair a validação de mídia de sticker para util compartilhado e reutilizar nos outros fluxos de download/conversão de mídia para padronizar limites de recursos.
