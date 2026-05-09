@@ -305,25 +305,15 @@ export async function ytCommand(client: WASocket, botInfo: Bot, message: Message
     })
     
     
-    // Verifica tamanho e comprime se necessário
-    let finalVideoBuffer = videoBuffer
     const videoSizeMB = videoBuffer.length / 1024 / 1024
     
     if (videoBuffer.length > MAX_WHATSAPP_VIDEO_SIZE) {
-        await safeEdit(buildCompactStatus('🔄 Comprimindo vídeo', 0))
-        
-        // Comprime o vídeo
-        finalVideoBuffer = await convertUtil.compressVideoToLimit(videoBuffer, MAX_WHATSAPP_VIDEO_SIZE, async (percent) => {
-            await safeEdit(buildCompactStatus('🔄 Comprimindo vídeo', percent))
-        })
-        
-        const compressedSizeMB = finalVideoBuffer.length / 1024 / 1024
-        console.log(`[ytCommand] ✅ Vídeo comprimido: ${videoSizeMB.toFixed(2)}MB → ${compressedSizeMB.toFixed(2)}MB`)
+        throw new Error(`❌ Vídeo muito grande (${videoSizeMB.toFixed(2)}MB). Tente um vídeo menor.`)
     }
     
     await safeEdit(buildCompactStatus('📤 Enviando vídeo', 100))
     
-    await waUtil.replyFileFromBuffer(client, message.chat_id, 'videoMessage', finalVideoBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'video/mp4'})
+    await waUtil.replyFileFromBuffer(client, message.chat_id, 'videoMessage', videoBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'video/mp4'})
     
     await safeEdit('✅ Concluído!')
 }
@@ -445,6 +435,10 @@ export async function xCommand(client: WASocket, botInfo: Bot, message: Message,
         })
 
         let finalVideoBuffer = mediaBuffer
+
+        if (mediaBuffer.length > MAX_WHATSAPP_VIDEO_SIZE * 2) {
+            throw new Error('❌ O vídeo do Twitter/X é grande demais para processamento seguro no momento.')
+        }
 
         try {
             await safeEdit(buildIndexedCompactStatus('🔄 Preparando vídeo', i + 1, totalMedia))
@@ -613,4 +607,3 @@ export async function downCommand(client: WASocket, botInfo: Bot, message: Messa
             throw new Error('❌ Link não reconhecido. Plataformas suportadas: YouTube, Instagram, Facebook, TikTok, Twitter/X')
     }
 }
-

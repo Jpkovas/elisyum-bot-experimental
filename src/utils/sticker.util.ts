@@ -8,6 +8,41 @@ import { Jimp } from 'jimp'
 import { StickerOptions, StickerType } from "../interfaces/library.interface.js"
 import botTexts from '../helpers/bot.texts.helper.js'
 
+const MAX_WEBP_INPUT_BYTES = 12 * 1024 * 1024
+const MAX_PNG_OUTPUT_BYTES = 20 * 1024 * 1024
+const WEBP_TO_PNG_TIMEOUT_MS = 8 * 1000
+
+function removeFileIfExists(filePath?: string) {
+    if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+    }
+}
+
+function runFfmpegToFile(command: ReturnType<typeof ffmpeg>, outputPath: string, timeoutMessage: string) {
+    return new Promise<void>((resolve, reject) => {
+        let settled = false
+        const timeoutId = setTimeout(() => {
+            command.kill('SIGKILL')
+            finish(reject, new Error(timeoutMessage))
+        }, WEBP_TO_PNG_TIMEOUT_MS)
+
+        const finish = (callback: (value?: any) => void, value?: any) => {
+            if (settled) {
+                return
+            }
+
+            settled = true
+            clearTimeout(timeoutId)
+            callback(value)
+        }
+
+        command
+            .on('end', () => finish(resolve))
+            .on('error', (err: Error) => finish(reject, err))
+            .save(outputPath)
+    })
+}
+
 export async function createSticker(mediaBuffer : Buffer, {pack = 'Ξ ʟ ʏ s ɪ ᴜ ᴍ  ɮ ᴏ ᴛ™', author = 'Elisyum Stickers', fps = 9, type = 'resize'}: StickerOptions){
     try {
         const bufferSticker = await stickerCreation(mediaBuffer, {pack, author, fps, type})
@@ -32,22 +67,7 @@ export async function renameSticker(stickerBuffer: Buffer, pack: string, author:
 
 export async function stickerToImage(stickerBuffer: Buffer){
     try {
-        const inputWebpPath = getTempPath('webp')
-        const outputPngPath = getTempPath('png')
-        fs.writeFileSync(inputWebpPath, stickerBuffer)
-
-        await new Promise <void>((resolve, reject) => {
-            ffmpeg(inputWebpPath)
-            .save(outputPngPath)
-            .on('end', () => resolve())
-            .on('error', (err: Error) => reject(err))
-        })
-
-        const imageBuffer = fs.readFileSync(outputPngPath)
-        fs.unlinkSync(inputWebpPath)
-        fs.unlinkSync(outputPngPath)
-
-        return imageBuffer
+        return await convertWebpToPng(stickerBuffer)
     } catch(err){
         showConsoleLibraryError(err, 'stickerToImage')
         throw new Error(botTexts.library_error)
@@ -96,28 +116,40 @@ async function addExif(buffer: Buffer, pack: string, author: string){
 }
 
 async function pngConvertion(mediaBuffer : Buffer){
+    return convertWebpToPng(mediaBuffer)
+}
+
+async function convertWebpToPng(mediaBuffer : Buffer){
+    if (mediaBuffer.length > MAX_WEBP_INPUT_BYTES) {
+        throw new Error('WebP image is too large to convert safely.')
+    }
+
+    let inputMediaPath: string | undefined
+    let outputMediaPath: string | undefined
+
     try {
-        const inputMediaPath = getTempPath('webp')
-        const outputMediaPath = getTempPath('png')
+        inputMediaPath = getTempPath('webp')
+        outputMediaPath = getTempPath('png')
         fs.writeFileSync(inputMediaPath, mediaBuffer)
-        
-        await new Promise <void>((resolve, reject) => {
-            ffmpeg(inputMediaPath)
-            .save(outputMediaPath)
-            .on('end', () => resolve())
-            .on('error', (err: Error) => reject(err))
-        }).catch((err: any)=>{
-            fs.unlinkSync(inputMediaPath)
-            throw err
-        })
+
+        const command = ffmpeg(inputMediaPath)
+            .outputOptions(['-frames:v 1'])
+
+        await runFfmpegToFile(command, outputMediaPath, 'FFmpeg WebP conversion timeout')
+
+        const outputStats = fs.statSync(outputMediaPath)
+        if (outputStats.size > MAX_PNG_OUTPUT_BYTES) {
+            throw new Error('Converted PNG is too large to process safely.')
+        }
 
         const pngBuffer = fs.readFileSync(outputMediaPath)
-        fs.unlinkSync(outputMediaPath)
-        fs.unlinkSync(inputMediaPath)
 
         return pngBuffer
     } catch(err) {
         throw err
+    } finally {
+        removeFileIfExists(outputMediaPath)
+        removeFileIfExists(inputMediaPath)
     }
 }
 

@@ -155,7 +155,7 @@ test("makeUpdate verifies checksum, extracts to staging, and then replaces dist"
     }
 })
 
-test("makeUpdate accepts legacy releases with only one zip asset", async () => {
+test("makeUpdate rejects releases without checksum sidecar", async () => {
     const appDir = mkdtempSync(path.join(tmpdir(), "elisyum-update-"))
     const distDir = path.join(appDir, "dist")
     const zipBuffer = makeZip({ "dist/app.js": "new" })
@@ -164,8 +164,24 @@ test("makeUpdate accepts legacy releases with only one zip asset", async () => {
     mockLatestRelease(zipBuffer, undefined)
 
     try {
-        await makeUpdate(appDir)
-        expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("new")
+        await expect(makeUpdate(appDir)).rejects.toThrow(/checksum/i)
+        expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("old")
+    } finally {
+        rmSync(appDir, { recursive: true, force: true })
+    }
+})
+
+test("makeUpdate rejects release zips that do not match the expected asset name", async () => {
+    const appDir = mkdtempSync(path.join(tmpdir(), "elisyum-update-"))
+    const distDir = path.join(appDir, "dist")
+    const zipBuffer = makeZip({ "dist/app.js": "new" })
+    mkdirSync(distDir, { recursive: true })
+    writeFileSync(path.join(distDir, "app.js"), "old")
+    mockLatestRelease(zipBuffer, sha256(zipBuffer), "LBOT-latest.zip")
+
+    try {
+        await expect(makeUpdate(appDir)).rejects.toThrow(/asset/i)
+        expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("old")
     } finally {
         rmSync(appDir, { recursive: true, force: true })
     }
@@ -176,4 +192,5 @@ test("bot updater no longer removes dist before makeUpdate validates the archive
 
     expect(source).not.toContain("removeSync('./dist')")
     expect(source).not.toContain('removeSync("./dist")')
+    expect(source).toContain('LBOT_AUTO_UPDATE')
 })

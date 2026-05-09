@@ -4,6 +4,44 @@ import axios from 'axios'
 import {getTempPath, showConsoleLibraryError} from './general.util.js'
 import botTexts from '../helpers/bot.texts.helper.js'
 
+const DEFAULT_FFMPEG_TIMEOUT_MS = 2 * 60 * 1000
+
+function getFfmpegTimeoutMs() {
+    const parsedValue = Number(process.env.FFMPEG_TIMEOUT_MS || DEFAULT_FFMPEG_TIMEOUT_MS)
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : DEFAULT_FFMPEG_TIMEOUT_MS
+}
+
+function removeFileIfExists(filePath?: string) {
+    if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+    }
+}
+
+function runFfmpegToFile(command: ReturnType<typeof ffmpeg>, outputPath: string, timeoutMessage: string) {
+    return new Promise<void>((resolve, reject) => {
+        let settled = false
+        const timeoutId = setTimeout(() => {
+            command.kill('SIGKILL')
+            finish(reject, new Error(timeoutMessage))
+        }, getFfmpegTimeoutMs())
+
+        const finish = (callback: (value?: any) => void, value?: any) => {
+            if (settled) {
+                return
+            }
+
+            settled = true
+            clearTimeout(timeoutId)
+            callback(value)
+        }
+
+        command
+            .on('end', () => finish(resolve))
+            .on('error', (err: Error) => finish(reject, err))
+            .save(outputPath)
+    })
+}
+
 export async function convertMp4ToMp3 (sourceType: 'buffer' | 'url',  video: Buffer | string, onProgress?: (percent: number) => void){
     try {
         const inputVideoPath = getTempPath('mp4')
@@ -95,10 +133,10 @@ export async function convertMp4ToMp3 (sourceType: 'buffer' | 'url',  video: Buf
 }
 
 export async function convertVideoToWhatsApp(sourceType: 'buffer' | 'url',  video: Buffer | string){
-    try {
-        const inputVideoPath = getTempPath('mp4')
-        const outputVideoPath = getTempPath('mp4')
+    const inputVideoPath = getTempPath('mp4')
+    const outputVideoPath = getTempPath('mp4')
 
+    try {
         if(sourceType == 'buffer'){
             if (!Buffer.isBuffer(video)) {
                 throw new Error('The media type is Buffer, but the video parameter is not a Buffer.')
@@ -117,8 +155,7 @@ export async function convertVideoToWhatsApp(sourceType: 'buffer' | 'url',  vide
             throw new Error('Unsupported media type.')
         }
         
-        await new Promise <void> ((resolve, reject)=>{
-            ffmpeg(inputVideoPath)
+        const command = ffmpeg(inputVideoPath)
             .outputOptions([
                 '-c:v libx264',
                 '-profile:v baseline',
@@ -132,22 +169,18 @@ export async function convertVideoToWhatsApp(sourceType: 'buffer' | 'url',  vide
                 '-ar 44100',
                 '-f mp4'
             ])
-            .save(outputVideoPath)
-            .on('end', () => resolve())
-            .on("error", (err: Error) => reject(err))
-        }).catch((err) =>{
-            fs.unlinkSync(inputVideoPath)
-            throw err
-        })
+
+        await runFfmpegToFile(command, outputVideoPath, 'FFmpeg conversion timeout')
 
         const videoBuffer = fs.readFileSync(outputVideoPath)
-        fs.unlinkSync(inputVideoPath)
-        fs.unlinkSync(outputVideoPath)
 
         return videoBuffer
     } catch(err){
         showConsoleLibraryError(err, 'convertVideoToWhatsApp')
         throw new Error(botTexts.library_error)
+    } finally {
+        removeFileIfExists(inputVideoPath)
+        removeFileIfExists(outputVideoPath)
     }
 }
 
@@ -267,10 +300,10 @@ export async function extractAudioFromVideo(sourceType : "file"|"buffer"|"url", 
 }
 
 export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: number = 16 * 1024 * 1024, onProgress?: (percent: number) => void): Promise<Buffer> {
+    const inputVideoPath = getTempPath('mp4')
+    const outputVideoPath = getTempPath('mp4')
+
     try {
-        const inputVideoPath = getTempPath('mp4')
-        const outputVideoPath = getTempPath('mp4')
-        
         fs.writeFileSync(inputVideoPath, videoBuffer)
         
         // Obter metadados do vídeo
@@ -303,35 +336,30 @@ export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: nu
             const strategy = strategies[i]
             console.log(`[compressVideo] Tentativa ${i + 1}/${strategies.length}: ${strategy.scale} CRF=${strategy.crf} bitrate=${strategy.bitrate}k`)
             
-            await new Promise<void>((resolve, reject) => {
-                const command = ffmpeg(inputVideoPath)
-                    .outputOptions([
-                        `-vf scale=${strategy.scale}`,
-                        `-c:v libx264`,
-                        `-crf ${strategy.crf}`,
-                        `-preset ${strategy.preset}`,
-                        `-b:v ${strategy.bitrate}k`,
-                        `-maxrate ${Math.floor(strategy.bitrate * 1.5)}k`,
-                        `-bufsize ${Math.floor(strategy.bitrate * 2)}k`,
-                        `-c:a aac`,
-                        `-b:a 96k`,
-                        `-movflags +faststart`
-                    ])
-                    .format('mp4')
-                    .save(outputVideoPath)
-                
-                if (onProgress && duration > 0) {
-                    command.on('progress', (progress: any) => {
-                        if (progress.percent && progress.percent > 0 && progress.percent <= 100) {
-                            onProgress(Math.floor(progress.percent))
-                        }
-                    })
-                }
-                
-                command
-                    .on('end', () => resolve())
-                    .on('error', (err: Error) => reject(err))
-            })
+            const command = ffmpeg(inputVideoPath)
+                .outputOptions([
+                    `-vf scale=${strategy.scale}`,
+                    `-c:v libx264`,
+                    `-crf ${strategy.crf}`,
+                    `-preset ${strategy.preset}`,
+                    `-b:v ${strategy.bitrate}k`,
+                    `-maxrate ${Math.floor(strategy.bitrate * 1.5)}k`,
+                    `-bufsize ${Math.floor(strategy.bitrate * 2)}k`,
+                    `-c:a aac`,
+                    `-b:a 96k`,
+                    `-movflags +faststart`
+                ])
+                .format('mp4')
+
+            if (onProgress && duration > 0) {
+                command.on('progress', (progress: any) => {
+                    if (progress.percent && progress.percent > 0 && progress.percent <= 100) {
+                        onProgress(Math.floor(progress.percent))
+                    }
+                })
+            }
+
+            await runFfmpegToFile(command, outputVideoPath, 'FFmpeg compression timeout')
             
             // Verifica tamanho do arquivo gerado
             const stats = fs.statSync(outputVideoPath)
@@ -340,8 +368,6 @@ export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: nu
             if (stats.size <= maxSizeBytes) {
                 // Sucesso! Arquivo cabe no limite
                 const compressedBuffer = fs.readFileSync(outputVideoPath)
-                fs.unlinkSync(inputVideoPath)
-                fs.unlinkSync(outputVideoPath)
                 
                 const reduction = ((1 - stats.size / originalSize) * 100).toFixed(1)
                 console.log(`[compressVideo] ✅ Comprimido com sucesso! Redução: ${reduction}%`)
@@ -350,7 +376,7 @@ export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: nu
             } else if (i < strategies.length - 1) {
                 // Ainda não cabe, tenta próxima estratégia
                 console.log(`[compressVideo] ⚠️ Ainda muito grande, tentando próxima estratégia...`)
-                fs.unlinkSync(outputVideoPath)
+                removeFileIfExists(outputVideoPath)
             }
         }
         
@@ -358,12 +384,13 @@ export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: nu
         // Retorna o último resultado mesmo que seja maior que o limite
         console.log(`[compressVideo] ⚠️ Não foi possível comprimir abaixo de ${maxSizeBytes / 1024 / 1024}MB`)
         const finalBuffer = fs.readFileSync(outputVideoPath)
-        fs.unlinkSync(inputVideoPath)
-        fs.unlinkSync(outputVideoPath)
         return finalBuffer
         
     } catch (err) {
         showConsoleLibraryError(err, 'compressVideoToLimit')
         throw new Error(botTexts.library_error)
+    } finally {
+        removeFileIfExists(inputVideoPath)
+        removeFileIfExists(outputVideoPath)
     }
 }

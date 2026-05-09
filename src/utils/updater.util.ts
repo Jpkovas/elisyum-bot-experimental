@@ -45,8 +45,7 @@ function getExpectedAssetName(version: string) {
 
 function selectUpdateAssets(release: ReleaseInfo) {
     const expectedAssetName = getExpectedAssetName(release.tag_name)
-    const zipAssets = release.assets.filter(asset => asset.name.toLowerCase().endsWith('.zip'))
-    const packageAsset = release.assets.find(asset => asset.name === expectedAssetName) || (zipAssets.length === 1 ? zipAssets[0] : undefined)
+    const packageAsset = release.assets.find(asset => asset.name === expectedAssetName)
     const checksumAsset = release.assets.find(asset => {
         if (!packageAsset) {
             return false
@@ -57,6 +56,10 @@ function selectUpdateAssets(release: ReleaseInfo) {
 
     if (!packageAsset) {
         throw new Error(`Expected update asset not found: ${expectedAssetName}`)
+    }
+
+    if (!checksumAsset) {
+        throw new Error(`Expected checksum asset not found for ${packageAsset.name}`)
     }
 
     return { packageAsset, checksumAsset }
@@ -255,17 +258,15 @@ export async function makeUpdate(targetPath: string = './'){
         const { packageAsset, checksumAsset } = selectUpdateAssets(data)
         const [{data : remoteVersion}, checksumResponse] = await Promise.all([
             axios.get(packageAsset.browser_download_url, {responseType: 'arraybuffer'}),
-            checksumAsset ? axios.get(checksumAsset.browser_download_url, {responseType: 'text'}) : Promise.resolve(undefined)
+            axios.get(checksumAsset.browser_download_url, {responseType: 'text'})
         ])
         const zipBuffer = Buffer.from(remoteVersion)
 
-        if (checksumResponse) {
-            const expectedChecksum = parseChecksum(String(checksumResponse.data))
-            const actualChecksum = sha256(zipBuffer)
+        const expectedChecksum = parseChecksum(String(checksumResponse.data))
+        const actualChecksum = sha256(zipBuffer)
 
-            if (actualChecksum !== expectedChecksum) {
-                throw new Error(`Update checksum mismatch: expected ${expectedChecksum}, got ${actualChecksum}`)
-            }
+        if (actualChecksum !== expectedChecksum) {
+            throw new Error(`Update checksum mismatch: expected ${expectedChecksum}, got ${actualChecksum}`)
         }
 
         await fs.ensureDir(stagingPath)

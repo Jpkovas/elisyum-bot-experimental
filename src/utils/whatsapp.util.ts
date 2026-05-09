@@ -328,7 +328,7 @@ export function sendLinkWithPreview(client: WASocket, chatId: string, text: stri
 
 export async function sendTextWithMentions(client: WASocket, chatId: string, text: string, mentions: string[], options?: MessageOptions) {
     await updatePresence(client, chatId, "composing")
-    return client.sendMessage(chatId, {text , mentions}, {ephemeralExpiration: options?.expiration})
+    return client.sendMessage(chatId, {text , mentions, linkPreview: null}, {ephemeralExpiration: options?.expiration})
 }
 
 export function sendSticker(client: WASocket, chatId: string, sticker: Buffer, options?: MessageOptions){
@@ -347,16 +347,13 @@ export async function sendFileFromUrl(client: WASocket, chatId: string, type: Me
 }
 
 export function replyText(client: WASocket, chatId: string, text: string, quoted: WAMessage, options?: MessageOptions){
-    if (options?.noLinkPreview){
-        return client.sendMessage(chatId, {text, linkPreview: null}, {quoted, ephemeralExpiration: options?.expiration})
-    }
-
-    return client.sendMessage(chatId, {text}, {quoted, ephemeralExpiration: options?.expiration})
+    return client.sendMessage(chatId, {text, linkPreview: null}, {quoted, ephemeralExpiration: options?.expiration})
 }
 
 export async function editText(client: WASocket, chatId: string, messageKey: any, text: string): Promise<any> {
     return client.sendMessage(chatId, { 
         text, 
+        linkPreview: null,
         edit: messageKey 
     })
 }
@@ -510,7 +507,7 @@ export async function replyFileFromBuffer (client: WASocket, chatId: string, typ
 
 export async function replyWithMentions (client: WASocket, chatId: string, text: string, mentions: string[], quoted: WAMessage, options?: MessageOptions){ 
     await updatePresence(client, chatId, "composing")
-    return client.sendMessage(chatId, {text , mentions}, {quoted, ephemeralExpiration: options?.expiration})
+    return client.sendMessage(chatId, {text , mentions, linkPreview: null}, {quoted, ephemeralExpiration: options?.expiration})
 }
 
 export function joinGroupInviteLink (client: WASocket, linkGroup : string){
