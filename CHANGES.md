@@ -1,0 +1,1 @@
+- Corrigido o processamento de eventos `modify` de participantes para atualizar o status de admin quando o campo `admin` existir (incluindo `null`), evitando privilégios indevidos após rebaixamento.

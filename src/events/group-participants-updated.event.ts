@@ -102,7 +102,7 @@ export async function groupParticipantsUpdated(client: WASocket, event: Particip
 
                 await groupController.setAdmin(event.id, participantId, false)
             } else if (event.action === 'modify') {
-                if (participant.admin != null) {
+                if (Object.prototype.hasOwnProperty.call(participant, 'admin')) {
                     await groupController.setAdmin(event.id, participantId, participant.admin != null)
                 }
             }
