@@ -4,6 +4,10 @@ import botTexts from "../helpers/bot.texts.helper.js";
 import { BotController } from "../controllers/bot.controller.js";
 import databaseMigration from "./database.migrate.helper.js";
 
+function isAutoUpdateEnabled() {
+    return process.env.LBOT_AUTO_UPDATE === 'true'
+}
+
 export async function botUpdater(){
     const botController = new BotController()
     const botInfo = botController.getBot()
@@ -23,6 +27,12 @@ export async function botUpdater(){
             console.log(colorText(botTexts.no_update_available))
         } else {
             console.log(colorText(botTexts.update_available, '#e0e031'))
+
+            if (!isAutoUpdateEnabled()) {
+                console.log("[ATUALIZAÇÃO]", colorText('Atualização automática desativada. Defina LBOT_AUTO_UPDATE=true para aplicar a atualização.', '#e0e031'))
+                return hasBotUpdated
+            }
+
             await updaterUtil.makeUpdate('./')
             botController.setDbMigrated(false)
             console.log(colorText(botTexts.bot_updated))

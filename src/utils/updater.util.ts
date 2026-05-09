@@ -45,8 +45,7 @@ function getExpectedAssetName(version: string) {
 
 function selectUpdateAssets(release: ReleaseInfo) {
     const expectedAssetName = getExpectedAssetName(release.tag_name)
-    const zipAssets = release.assets.filter(asset => asset.name.toLowerCase().endsWith('.zip'))
-    const packageAsset = release.assets.find(asset => asset.name === expectedAssetName) || (zipAssets.length === 1 ? zipAssets[0] : undefined)
+    const packageAsset = release.assets.find(asset => asset.name === expectedAssetName)
     const checksumAsset = release.assets.find(asset => {
         if (!packageAsset) {
             return false
@@ -57,6 +56,10 @@ function selectUpdateAssets(release: ReleaseInfo) {
 
     if (!packageAsset) {
         throw new Error(`Expected update asset not found: ${expectedAssetName}`)
+    }
+
+    if (!checksumAsset) {
+        throw new Error(`Checksum asset not found for update package: ${packageAsset.name}`)
     }
 
     return { packageAsset, checksumAsset }
