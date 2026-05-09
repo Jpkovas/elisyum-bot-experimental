@@ -8,6 +8,10 @@ import { Jimp } from 'jimp'
 import { StickerOptions, StickerType } from "../interfaces/library.interface.js"
 import botTexts from '../helpers/bot.texts.helper.js'
 
+const MAX_WEBP_INPUT_BYTES = 12 * 1024 * 1024
+const MAX_PNG_OUTPUT_BYTES = 20 * 1024 * 1024
+const WEBP_TO_PNG_TIMEOUT_SECONDS = 8
+
 export async function createSticker(mediaBuffer : Buffer, {pack = 'Ξ ʟ ʏ s ɪ ᴜ ᴍ  ɮ ᴏ ᴛ™', author = 'Elisyum Stickers', fps = 9, type = 'resize'}: StickerOptions){
     try {
         const bufferSticker = await stickerCreation(mediaBuffer, {pack, author, fps, type})
@@ -96,28 +100,45 @@ async function addExif(buffer: Buffer, pack: string, author: string){
 }
 
 async function pngConvertion(mediaBuffer : Buffer){
+    if (mediaBuffer.length > MAX_WEBP_INPUT_BYTES) {
+        throw new Error('WebP image is too large to convert safely.')
+    }
+
+    let inputMediaPath: string | undefined
+    let outputMediaPath: string | undefined
+
     try {
-        const inputMediaPath = getTempPath('webp')
-        const outputMediaPath = getTempPath('png')
+        inputMediaPath = getTempPath('webp')
+        outputMediaPath = getTempPath('png')
         fs.writeFileSync(inputMediaPath, mediaBuffer)
         
         await new Promise <void>((resolve, reject) => {
             ffmpeg(inputMediaPath)
+            .duration(WEBP_TO_PNG_TIMEOUT_SECONDS)
+            .outputOptions(['-frames:v 1'])
             .save(outputMediaPath)
             .on('end', () => resolve())
             .on('error', (err: Error) => reject(err))
-        }).catch((err: any)=>{
-            fs.unlinkSync(inputMediaPath)
-            throw err
         })
 
+        const outputStats = fs.statSync(outputMediaPath)
+        if (outputStats.size > MAX_PNG_OUTPUT_BYTES) {
+            throw new Error('Converted PNG is too large to process safely.')
+        }
+
         const pngBuffer = fs.readFileSync(outputMediaPath)
-        fs.unlinkSync(outputMediaPath)
-        fs.unlinkSync(inputMediaPath)
 
         return pngBuffer
     } catch(err) {
         throw err
+    } finally {
+        if (outputMediaPath && fs.existsSync(outputMediaPath)) {
+            fs.unlinkSync(outputMediaPath)
+        }
+
+        if (inputMediaPath && fs.existsSync(inputMediaPath)) {
+            fs.unlinkSync(inputMediaPath)
+        }
     }
 }
 
