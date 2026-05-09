@@ -305,25 +305,15 @@ export async function ytCommand(client: WASocket, botInfo: Bot, message: Message
     })
     
     
-    // Verifica tamanho e comprime se necessário
-    let finalVideoBuffer = videoBuffer
     const videoSizeMB = videoBuffer.length / 1024 / 1024
-    
+
     if (videoBuffer.length > MAX_WHATSAPP_VIDEO_SIZE) {
-        await safeEdit(buildCompactStatus('🔄 Comprimindo vídeo', 0))
-        
-        // Comprime o vídeo
-        finalVideoBuffer = await convertUtil.compressVideoToLimit(videoBuffer, MAX_WHATSAPP_VIDEO_SIZE, async (percent) => {
-            await safeEdit(buildCompactStatus('🔄 Comprimindo vídeo', percent))
-        })
-        
-        const compressedSizeMB = finalVideoBuffer.length / 1024 / 1024
-        console.log(`[ytCommand] ✅ Vídeo comprimido: ${videoSizeMB.toFixed(2)}MB → ${compressedSizeMB.toFixed(2)}MB`)
+        throw new Error(`❌ Vídeo muito grande (${videoSizeMB.toFixed(2)}MB). Tente um vídeo menor.`)
     }
-    
+
     await safeEdit(buildCompactStatus('📤 Enviando vídeo', 100))
-    
-    await waUtil.replyFileFromBuffer(client, message.chat_id, 'videoMessage', finalVideoBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'video/mp4'})
+
+    await waUtil.replyFileFromBuffer(client, message.chat_id, 'videoMessage', videoBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'video/mp4'})
     
     await safeEdit('✅ Concluído!')
 }
