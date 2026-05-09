@@ -270,11 +270,22 @@ export async function simgCommand(client: WASocket, botInfo: Bot, message: Messa
     let messageQuotedData = message.quotedMessage.wa_message
 
     if (messageQuotedData.message?.stickerMessage?.url == "https://web.whatsapp.net") {
-        messageQuotedData.message.stickerMessage.url = `https://mmg.whatsapp.net${messageQuotedData.message.stickerMessage.directPath}` 
+        const directPath = messageQuotedData.message.stickerMessage.directPath
+
+        if (!directPath || !directPath.startsWith('/')) {
+            throw new Error(stickerMsgs.simg.error_sticker)
+        }
+
+        const hasUnsafePattern = directPath.includes('@') || directPath.includes('\\') || directPath.includes('..') || directPath.startsWith('//')
+
+        if (hasUnsafePattern) {
+            throw new Error(stickerMsgs.simg.error_sticker)
+        }
+
+        messageQuotedData.message.stickerMessage.url = `https://mmg.whatsapp.net${directPath}`
     }
 
     const stickerBuffer = await waUtil.downloadMessageAsBuffer(client, message.quotedMessage.wa_message)
     const imageBuffer = await stickerUtil.stickerToImage(stickerBuffer)
     await waUtil.replyFileFromBuffer(client, message.chat_id, 'imageMessage', imageBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'image/png'})
 }
-
