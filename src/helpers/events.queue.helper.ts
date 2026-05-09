@@ -76,8 +76,9 @@ export async function queueEvent<T extends BaileysEvent>(
             const queuedParticipantIds = toParticipantIds(queuedEvent.participants)
             const sameGroup = queuedEvent.id === newEvent.id
             const hasOverlap = queuedParticipantIds.some(id => newParticipantsIds.includes(id))
+            const sameAction = queuedEvent.action === newEvent.action
 
-            return !(sameGroup && hasOverlap)
+            return !(sameGroup && hasOverlap && sameAction)
         })
     }
 

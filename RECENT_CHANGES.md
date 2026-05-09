@@ -1,5 +1,6 @@
 # Recent Changes
 
+- Consolidamos os fixes de seguranca pendentes dos PRs abertos, cobrindo updater, downloads de midia, stickers, previews de link, eventos de participantes e instalacao Termux.
 - Corrigido o texto de stickers criados com `!s` a partir de mensagens citadas com menções, preservando `mentionedJid` da mensagem original e substituindo IDs por nomes antes de renderizar o balão.
 - Adicionamos o comando `!vtnc`, que responde com o ASCII solicitado mencionando o alvo e mandando a pessoa tomar no cu.
 - Reorganizamos scripts, documentação e o binário `yt-dlp` em pastas dedicadas, atualizando utilitários e instruções para a nova estrutura do repositório.

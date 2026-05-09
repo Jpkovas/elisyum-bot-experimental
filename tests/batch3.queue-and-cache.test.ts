@@ -42,6 +42,46 @@ test("event queue coalesces group updates by group id", async () => {
     expect(emitted[0].data[0].subject).toBe("new")
 })
 
+test("participant queue preserves different actions for the same participant", async () => {
+    const cache = new NodeCache()
+
+    await queueEvent(cache, "group-participants.update", {
+        id: "group-1@g.us",
+        action: "add",
+        participants: ["5511999999999@s.whatsapp.net"],
+    } as any)
+    await queueEvent(cache, "group-participants.update", {
+        id: "group-1@g.us",
+        action: "remove",
+        participants: ["5511999999999@s.whatsapp.net"],
+    } as any)
+
+    const queued = cache.get("events") as Array<{ event: string, data: any }>
+
+    expect(queued).toHaveLength(2)
+    expect(queued.map(item => item.data.action)).toEqual(["add", "remove"])
+})
+
+test("participant queue still coalesces duplicate actions for the same participant", async () => {
+    const cache = new NodeCache()
+
+    await queueEvent(cache, "group-participants.update", {
+        id: "group-1@g.us",
+        action: "modify",
+        participants: [{ id: "5511999999999@s.whatsapp.net", admin: "admin" }],
+    } as any)
+    await queueEvent(cache, "group-participants.update", {
+        id: "group-1@g.us",
+        action: "modify",
+        participants: [{ id: "5511999999999@s.whatsapp.net", admin: null }],
+    } as any)
+
+    const queued = cache.get("events") as Array<{ event: string, data: any }>
+
+    expect(queued).toHaveLength(1)
+    expect(queued[0].data.participants[0].admin).toBeNull()
+})
+
 test("message cache does not return the wrong message when message ids collide across chats", () => {
     const cache = new NodeCache()
     const firstMessage = { conversation: "first chat" }

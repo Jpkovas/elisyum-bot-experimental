@@ -4,6 +4,7 @@ const botTexts = {
     bot_data: "✓ Obteve dados do BOT",
     no_update_available: '✓ Não há atualização disponível, seu bot está na versão mais recente.',
     update_available: '! Uma nova atualização foi encontrada, aguarde o término da atualização...',
+    update_available_manual: '! Uma nova atualização foi encontrada. A atualização automática fica desativada por segurança; defina LBOT_AUTO_UPDATE=true apenas se quiser aplicar o pacote verificado no startup.',
     error_check_update: 'Não foi possível checar se há alguma atualização disponível, o bot será iniciado.',
     bot_updated: 'Seu bot foi atualizado com sucesso e será desligado, inicie ele novamente.',
     not_connected: '! Parece que você não está com um dispositivo conectado.\n',

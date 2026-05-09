@@ -14,7 +14,7 @@ import { replaceMentionIdsWithNames } from "../utils/mention.util.js"
 // Mensagens dos comandos de sticker (para evitar dependência circular)
 const stickerMsgs = {
     s: {
-        error_limit: 'O video/gif deve ter no máximo 8 segundos.',
+        error_limit: 'O video/gif deve ter no máximo 9 segundos e 10MB.',
         error_message: "Houve um erro ao obter os dados da mensagem.",
         error_no_text: 'A mensagem citada não possui texto.',
         error_too_long: 'A mensagem é muito longa. Máximo de 500 caracteres.',
@@ -29,6 +29,52 @@ const stickerMsgs = {
         error_message: "Houve um erro ao obter os dados da mensagem.",
         author_text: 'Solicitado por: {$1}'
     }
+}
+
+const MAX_STICKER_MEDIA_BYTES = 10 * 1024 * 1024
+const MAX_STICKER_VIDEO_SECONDS = 9
+
+export function normalizeFileLength(fileLength?: number | Long | null) {
+    if (typeof fileLength === 'number') {
+        return Number.isFinite(fileLength) ? fileLength : undefined
+    }
+
+    if (fileLength && typeof (fileLength as { toNumber?: () => number }).toNumber === 'function') {
+        const value = (fileLength as { toNumber: () => number }).toNumber()
+        return Number.isFinite(value) ? value : undefined
+    }
+
+    return undefined
+}
+
+export function validateStickerMedia(type: string, seconds?: number, fileLength?: number | Long | null) {
+    const normalizedFileLength = normalizeFileLength(fileLength)
+
+    if (!normalizedFileLength || normalizedFileLength <= 0 || normalizedFileLength > MAX_STICKER_MEDIA_BYTES) {
+        throw new Error(stickerMsgs.s.error_limit)
+    }
+
+    if (type === 'videoMessage' && typeof seconds === 'number' && Number.isFinite(seconds) && seconds > MAX_STICKER_VIDEO_SECONDS) {
+        throw new Error(stickerMsgs.s.error_limit)
+    }
+}
+
+export function buildSafeStickerMediaUrl(directPath?: string | null) {
+    if (!directPath || !directPath.startsWith('/') || directPath.startsWith('//')) {
+        throw new Error(stickerMsgs.simg.error_sticker)
+    }
+
+    if (directPath.includes('@') || directPath.includes('\\') || directPath.includes('..') || directPath.includes('\0')) {
+        throw new Error(stickerMsgs.simg.error_sticker)
+    }
+
+    const mediaUrl = new URL(directPath, 'https://mmg.whatsapp.net')
+
+    if (mediaUrl.origin !== 'https://mmg.whatsapp.net') {
+        throw new Error(stickerMsgs.simg.error_sticker)
+    }
+
+    return mediaUrl.toString()
 }
 
 function getGroupParticipantName(participant: GroupMetadata['participants'][number]) {
@@ -94,7 +140,8 @@ export async function sCommand(client: WASocket, botInfo: Bot, message: Message,
     let messageData = {
         type : (message.isQuoted) ? message.quotedMessage?.type : message.type,
         message: (message.isQuoted) ? message.quotedMessage?.wa_message  : message.wa_message,
-        seconds: (message.isQuoted) ? message.quotedMessage?.media?.seconds : message.media?.seconds
+        seconds: (message.isQuoted) ? message.quotedMessage?.media?.seconds : message.media?.seconds,
+        fileLength: (message.isQuoted) ? message.quotedMessage?.media?.file_length : message.media?.file_length
     }
 
     if (!messageData.type || !messageData.message) {
@@ -250,9 +297,9 @@ export async function sCommand(client: WASocket, botInfo: Bot, message: Message,
     // Comportamento original para imagens/vídeos
     if (messageData.type != "imageMessage" && messageData.type != "videoMessage") {
         throw new Error(messageErrorCommandUsage(botInfo.prefix, message))
-    } else if (messageData.type == "videoMessage" && messageData.seconds && messageData.seconds  > 9) {
-        throw new Error(stickerMsgs.s.error_limit)
     }
+
+    validateStickerMedia(messageData.type, messageData.seconds, messageData.fileLength)
     
     const mediaBuffer = await waUtil.downloadMessageAsBuffer(client, messageData.message)
     const authorText = buildText(stickerMsgs.s.author_text, message.pushname)
@@ -270,11 +317,10 @@ export async function simgCommand(client: WASocket, botInfo: Bot, message: Messa
     let messageQuotedData = message.quotedMessage.wa_message
 
     if (messageQuotedData.message?.stickerMessage?.url == "https://web.whatsapp.net") {
-        messageQuotedData.message.stickerMessage.url = `https://mmg.whatsapp.net${messageQuotedData.message.stickerMessage.directPath}` 
+        messageQuotedData.message.stickerMessage.url = buildSafeStickerMediaUrl(messageQuotedData.message.stickerMessage.directPath)
     }
 
     const stickerBuffer = await waUtil.downloadMessageAsBuffer(client, message.quotedMessage.wa_message)
     const imageBuffer = await stickerUtil.stickerToImage(stickerBuffer)
     await waUtil.replyFileFromBuffer(client, message.chat_id, 'imageMessage', imageBuffer, '', message.wa_message, {expiration: message.expiration, mimetype: 'image/png'})
 }
-
