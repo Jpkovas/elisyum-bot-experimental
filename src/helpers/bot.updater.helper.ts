@@ -22,11 +22,7 @@ export async function botUpdater(){
         if (checkUpdate.latest) {
             console.log(colorText(botTexts.no_update_available))
         } else {
-            console.log(colorText(botTexts.update_available, '#e0e031'))
-            await updaterUtil.makeUpdate('./')
-            botController.setDbMigrated(false)
-            console.log(colorText(botTexts.bot_updated))
-            hasBotUpdated = true
+            console.log(colorText(botTexts.update_available_manual, '#d63e3e'))
         }
         
         return hasBotUpdated
