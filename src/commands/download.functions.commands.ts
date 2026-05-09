@@ -446,6 +446,10 @@ export async function xCommand(client: WASocket, botInfo: Bot, message: Message,
 
         let finalVideoBuffer = mediaBuffer
 
+        if (mediaBuffer.length > MAX_WHATSAPP_VIDEO_SIZE * 2) {
+            throw new Error('❌ O vídeo do Twitter/X é grande demais para processamento seguro no momento.')
+        }
+
         try {
             await safeEdit(buildIndexedCompactStatus('🔄 Preparando vídeo', i + 1, totalMedia))
             finalVideoBuffer = await convertUtil.convertVideoToWhatsApp('buffer', mediaBuffer)
