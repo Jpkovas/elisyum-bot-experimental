@@ -155,7 +155,7 @@ test("makeUpdate verifies checksum, extracts to staging, and then replaces dist"
     }
 })
 
-test("makeUpdate accepts legacy releases with only one zip asset", async () => {
+test("makeUpdate rejects legacy releases with only one zip asset", async () => {
     const appDir = mkdtempSync(path.join(tmpdir(), "elisyum-update-"))
     const distDir = path.join(appDir, "dist")
     const zipBuffer = makeZip({ "dist/app.js": "new" })
@@ -164,8 +164,8 @@ test("makeUpdate accepts legacy releases with only one zip asset", async () => {
     mockLatestRelease(zipBuffer, undefined)
 
     try {
-        await makeUpdate(appDir)
-        expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("new")
+        await expect(makeUpdate(appDir)).rejects.toThrow(/checksum/i)
+        expect(readFileSync(path.join(distDir, "app.js"), "utf8")).toBe("old")
     } finally {
         rmSync(appDir, { recursive: true, force: true })
     }
