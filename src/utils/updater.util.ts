@@ -59,6 +59,10 @@ function selectUpdateAssets(release: ReleaseInfo) {
         throw new Error(`Expected update asset not found: ${expectedAssetName}`)
     }
 
+    if (!checksumAsset) {
+        throw new Error(`Missing checksum asset for update package: ${packageAsset.name}`)
+    }
+
     return { packageAsset, checksumAsset }
 }
 
@@ -255,7 +259,7 @@ export async function makeUpdate(targetPath: string = './'){
         const { packageAsset, checksumAsset } = selectUpdateAssets(data)
         const [{data : remoteVersion}, checksumResponse] = await Promise.all([
             axios.get(packageAsset.browser_download_url, {responseType: 'arraybuffer'}),
-            checksumAsset ? axios.get(checksumAsset.browser_download_url, {responseType: 'text'}) : Promise.resolve(undefined)
+            axios.get(checksumAsset.browser_download_url, {responseType: 'text'})
         ])
         const zipBuffer = Buffer.from(remoteVersion)
 
