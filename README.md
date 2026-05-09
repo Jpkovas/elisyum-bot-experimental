@@ -127,7 +127,7 @@ Faça a instalação do .apk mais atual do Termux: [AQUI](https://github.com/ter
 Abra o **Termux** comece usando este comando para fazer o download e instalação do bot, isso pode demorar algum tempo até instalar tudo.
 ```bash
 pkg install wget -y
-wget -O install-termux.sh tinyurl.com/lbot-termux
+wget -O install-termux.sh https://raw.githubusercontent.com/Jpkovas/elisyum-bot-experimental/HEAD/scripts/setup/install-termux.sh
 less install-termux.sh
 bash install-termux.sh
 cd ~/LBOT && bun start
