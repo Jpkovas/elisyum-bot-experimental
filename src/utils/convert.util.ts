@@ -4,6 +4,13 @@ import axios from 'axios'
 import {getTempPath, showConsoleLibraryError} from './general.util.js'
 import botTexts from '../helpers/bot.texts.helper.js'
 
+const DEFAULT_FFMPEG_TIMEOUT_MS = 2 * 60 * 1000
+
+function getFfmpegTimeoutMs() {
+    const parsedValue = Number(process.env.FFMPEG_TIMEOUT_MS || DEFAULT_FFMPEG_TIMEOUT_MS)
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : DEFAULT_FFMPEG_TIMEOUT_MS
+}
+
 export async function convertMp4ToMp3 (sourceType: 'buffer' | 'url',  video: Buffer | string, onProgress?: (percent: number) => void){
     try {
         const inputVideoPath = getTempPath('mp4')
@@ -118,7 +125,13 @@ export async function convertVideoToWhatsApp(sourceType: 'buffer' | 'url',  vide
         }
         
         await new Promise <void> ((resolve, reject)=>{
-            ffmpeg(inputVideoPath)
+            const command = ffmpeg(inputVideoPath)
+            const timeoutId = setTimeout(() => {
+                command.kill('SIGKILL')
+                reject(new Error('FFmpeg conversion timeout'))
+            }, getFfmpegTimeoutMs())
+
+            command
             .outputOptions([
                 '-c:v libx264',
                 '-profile:v baseline',
@@ -133,8 +146,14 @@ export async function convertVideoToWhatsApp(sourceType: 'buffer' | 'url',  vide
                 '-f mp4'
             ])
             .save(outputVideoPath)
-            .on('end', () => resolve())
-            .on("error", (err: Error) => reject(err))
+            .on('end', () => {
+                clearTimeout(timeoutId)
+                resolve()
+            })
+            .on("error", (err: Error) => {
+                clearTimeout(timeoutId)
+                reject(err)
+            })
         }).catch((err) =>{
             fs.unlinkSync(inputVideoPath)
             throw err
@@ -305,6 +324,12 @@ export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: nu
             
             await new Promise<void>((resolve, reject) => {
                 const command = ffmpeg(inputVideoPath)
+                const timeoutId = setTimeout(() => {
+                    command.kill('SIGKILL')
+                    reject(new Error('FFmpeg compression timeout'))
+                }, getFfmpegTimeoutMs())
+
+                command
                     .outputOptions([
                         `-vf scale=${strategy.scale}`,
                         `-c:v libx264`,
@@ -329,8 +354,14 @@ export async function compressVideoToLimit(videoBuffer: Buffer, maxSizeBytes: nu
                 }
                 
                 command
-                    .on('end', () => resolve())
-                    .on('error', (err: Error) => reject(err))
+                    .on('end', () => {
+                        clearTimeout(timeoutId)
+                        resolve()
+                    })
+                    .on('error', (err: Error) => {
+                        clearTimeout(timeoutId)
+                        reject(err)
+                    })
             })
             
             // Verifica tamanho do arquivo gerado
