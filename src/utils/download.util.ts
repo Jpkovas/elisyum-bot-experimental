@@ -74,6 +74,33 @@ type DownloadFromUrlOptions = {
 
 class DownloadSizeLimitError extends Error {}
 
+function parseDurationToSeconds(rawDuration: unknown) {
+    if (typeof rawDuration === 'number' && Number.isFinite(rawDuration)) {
+        return Math.max(0, Math.floor(rawDuration))
+    }
+
+    const asNumber = Number(rawDuration)
+    if (Number.isFinite(asNumber) && asNumber >= 0) {
+        return Math.floor(asNumber)
+    }
+
+    if (typeof rawDuration !== 'string') {
+        return 0
+    }
+
+    const normalized = rawDuration.trim()
+    if (!normalized) {
+        return 0
+    }
+
+    const parts = normalized.split(':').map((part) => Number(part))
+    if (!parts.length || parts.some((part) => !Number.isFinite(part) || part < 0)) {
+        return 0
+    }
+
+    return parts.reduce((seconds, part) => seconds * 60 + part, 0)
+}
+
 function getPositiveIntegerEnv(name: string, fallback: number) {
     const rawValue = process.env[name]
     const parsedValue = rawValue ? Number(rawValue) : fallback
@@ -297,7 +324,7 @@ export async function youtubeMedia (text: string){
         if (quickInfo) {
             console.log('[youtubeMedia] 📦 Usando dados do yts (busca)')
             // Valida e converte duração (yts retorna duration.seconds)
-            const duration = Number(quickInfo.duration?.seconds) || Number(quickInfo.timestamp) || 0
+            const duration = parseDurationToSeconds(quickInfo.duration?.seconds ?? quickInfo.seconds ?? quickInfo.timestamp)
             
             const ytInfo : YTInfo = {
                 id_video : videoId,
@@ -310,8 +337,11 @@ export async function youtubeMedia (text: string){
                 url: '', // URL será obtida apenas no download
                 thumbnail: quickInfo.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
             }
-            console.log('[youtubeMedia] ✅ Retornando:', ytInfo.title)
-            return ytInfo
+            if (duration > 0 || quickInfo.isLive) {
+                console.log('[youtubeMedia] ✅ Retornando:', ytInfo.title)
+                return ytInfo
+            }
+            console.log('[youtubeMedia] ⚠️ Duração não confiável no yts (busca), usando fallback yt-dlp')
         }
 
         // Para URLs diretas, usa yts com a URL completa para obter metadados básicos
@@ -321,7 +351,7 @@ export async function youtubeMedia (text: string){
             if (quickInfo) {
                 console.log('[youtubeMedia] 📦 Dados obtidos do yts (por ID)')
                 // Valida e converte duração (yts retorna duration.seconds)
-                const duration = Number(quickInfo.duration?.seconds) || Number(quickInfo.timestamp) || 0
+                const duration = parseDurationToSeconds(quickInfo.duration?.seconds ?? quickInfo.seconds ?? quickInfo.timestamp)
                 
                 const ytInfo : YTInfo = {
                     id_video : videoId,
@@ -334,8 +364,11 @@ export async function youtubeMedia (text: string){
                     url: '',
                     thumbnail: quickInfo.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
                 }
-                console.log('[youtubeMedia] ✅ Retornando:', ytInfo.title)
-                return ytInfo
+                if (duration > 0 || quickInfo.isLive) {
+                    console.log('[youtubeMedia] ✅ Retornando:', ytInfo.title)
+                    return ytInfo
+                }
+                console.log('[youtubeMedia] ⚠️ Duração não confiável no yts (id), usando fallback yt-dlp')
             }
             console.log('[youtubeMedia] ⚠️ yts retornou vazio')
         } catch(ytsError) {
